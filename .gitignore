@@ -8,6 +8,13 @@ out-luau/
 # Generated bindings (rbxcs bind / add-package output in consumer projects)
 Bindings/
 
+# Docs site (Docusaurus): node deps, build output, and generated pages (regenerated from source)
+website/node_modules/
+website/build/
+website/.docusaurus/
+website/docs/api/
+website/docs/examples/
+
 # NuGet packages / build artifacts
 *.nupkg
 nupkg/

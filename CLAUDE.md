@@ -16,6 +16,12 @@ Add a comment **only** when it is VITAL to understanding, i.e. one of:
 No restating what the code does. No section banners. No docstrings-by-default. No "// loop over items".
 If the explanation is longer than the code it explains, the code needs a better name, not a comment.
 
+**Exception — XML doc comments on the PUBLIC API surface.** `///` `<summary>`/`<param>`/`<returns>`/
+`<remarks>`/`<example>` on public members of `RobloxCS.Defs` (and other public entry points) are
+documentation contracts, not implementation narration — they are the source the docs site extracts
+(`website/`, via DefaultDocumentation). Keep them; they are not the banned kind of comment.
+Implementation bodies stay comment-free per the rule above.
+
 ## Architecture
 
 ```

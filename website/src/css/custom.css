@@ -1,0 +1,23 @@
+/* rbxcs docs theme — restrained, C#-blue accent. */
+:root {
+  --ifm-color-primary: #3b6db5;
+  --ifm-color-primary-dark: #35619f;
+  --ifm-color-primary-darker: #325c96;
+  --ifm-color-primary-darkest: #294c7c;
+  --ifm-color-primary-light: #4a7abd;
+  --ifm-color-primary-lighter: #5580c1;
+  --ifm-color-primary-lightest: #729ad0;
+  --ifm-code-font-size: 92%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #7aa6df;
+  --ifm-color-primary-dark: #5e93d7;
+  --ifm-color-primary-darker: #4f8ad3;
+  --ifm-color-primary-darkest: #316fbf;
+  --ifm-color-primary-light: #96b9e7;
+  --ifm-color-primary-lighter: #a5c3eb;
+  --ifm-color-primary-lightest: #d1e0f5;
+  --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.1);
+}

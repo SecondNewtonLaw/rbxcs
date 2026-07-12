@@ -8,6 +8,11 @@
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>RobloxCS.Defs</RootNamespace>
+    <!-- Emit XML docs for the documentation pipeline. CS1591 suppressed: the generated Roblox API
+         surface (RobloxApi.g.cs) is intentionally undocumented (it mirrors Roblox's own docs); the
+         hand-written rbxcs surface carries the /// docs the site extracts. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
