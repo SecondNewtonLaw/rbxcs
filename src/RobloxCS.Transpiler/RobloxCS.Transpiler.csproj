@@ -11,6 +11,27 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
     <ProjectReference Include="..\RobloxCS.Luau.Ast\RobloxCS.Luau.Ast.csproj" />
     <ProjectReference Include="..\RobloxCS.Luau\RobloxCS.Luau.csproj" />
+    <!-- Build-order only: the parallel-safety table is generated from the live API dump below. -->
+    <ProjectReference Include="..\RobloxCS.ApiGen\RobloxCS.ApiGen.csproj"
+                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
   </ItemGroup>
+
+  <!-- RobloxThreadSafety.g.cs (the parallel-phase legality table) is generated at build from the
+       Roblox API Dump's ThreadSafety tags into obj/ (gitignored), not committed. Fetches once; the
+       Exists() guard skips the network on incremental builds. Delete obj to force a refresh. -->
+  <!-- Path is computed inside the target: $(IntermediateOutputPath) isn't set until the SDK targets
+       import (after this body), so evaluating it here keeps the output in obj/, not the source dir. -->
+  <Target Name="GenerateRobloxThreadSafety" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <RobloxCSApiGenDll>$(MSBuildThisFileDirectory)..\RobloxCS.ApiGen\bin\$(Configuration)\net10.0\RobloxCS.ApiGen.dll</RobloxCSApiGenDll>
+      <RobloxCSThreadSafetyGen>$(IntermediateOutputPath)RobloxThreadSafety.g.cs</RobloxCSThreadSafetyGen>
+    </PropertyGroup>
+    <Exec Condition="!Exists('$(RobloxCSThreadSafetyGen)')"
+          Command="dotnet &quot;$(RobloxCSApiGenDll)&quot; --threadsafety --fetch &quot;$(RobloxCSThreadSafetyGen)&quot;" />
+    <ItemGroup>
+      <Compile Include="$(RobloxCSThreadSafetyGen)" />
+      <FileWrites Include="$(RobloxCSThreadSafetyGen)" />
+    </ItemGroup>
+  </Target>
 
 </Project>

@@ -1,8 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- C# reference definitions the CONSUMER compiles against: context/entry attributes,
-       Roblox globals, BCL subset. F10 splits this into generated ref assemblies.
-       netstandard2.0 so any consumer TFM can reference it. -->
+       Roblox globals, BCL subset. netstandard2.0 so any consumer TFM can reference it. -->
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <Nullable>enable</Nullable>
@@ -10,5 +9,28 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>RobloxCS.Defs</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Build-order only: the Roblox API surface is generated from the live API dump below. -->
+    <ProjectReference Include="..\RobloxCS.ApiGen\RobloxCS.ApiGen.csproj"
+                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+  </ItemGroup>
+
+  <!-- RobloxApi.g.cs (the whole Roblox class/enum/datatype surface) is generated at build from the
+       Roblox API Dump into obj/ (gitignored), not committed. Fetches once; the Exists() guard skips
+       the network on incremental builds. Delete obj to force a refresh. Path is computed in-target
+       because $(IntermediateOutputPath) isn't set until the SDK targets import (after this body). -->
+  <Target Name="GenerateRobloxApi" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <RobloxCSApiGenDll>$(MSBuildThisFileDirectory)..\RobloxCS.ApiGen\bin\$(Configuration)\net10.0\RobloxCS.ApiGen.dll</RobloxCSApiGenDll>
+      <RobloxCSApiGen>$(IntermediateOutputPath)RobloxApi.g.cs</RobloxCSApiGen>
+    </PropertyGroup>
+    <Exec Condition="!Exists('$(RobloxCSApiGen)')"
+          Command="dotnet &quot;$(RobloxCSApiGenDll)&quot; --fetch &quot;$(RobloxCSApiGen)&quot;" />
+    <ItemGroup>
+      <Compile Include="$(RobloxCSApiGen)" />
+      <FileWrites Include="$(RobloxCSApiGen)" />
+    </ItemGroup>
+  </Target>
 
 </Project>
