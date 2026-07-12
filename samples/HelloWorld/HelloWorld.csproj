@@ -26,7 +26,7 @@
   <!-- P0 LOCAL WIRING: consume the SDK from source. Packaged consumers need only
        a single <PackageReference Include="RobloxCS.Sdk" />. -->
   <PropertyGroup>
-    <RobloxCSTaskAssembly>$(MSBuildThisFileDirectory)..\..\src\RobloxCS.BuildTask\bin\$(Configuration)\netstandard2.0\RobloxCS.BuildTask.dll</RobloxCSTaskAssembly>
+    <RobloxCSTaskDir>$(MSBuildThisFileDirectory)..\..\src\RobloxCS.BuildTask\bin\$(Configuration)\netstandard2.0</RobloxCSTaskDir>
     <RobloxCSRuntimeDir>$(MSBuildThisFileDirectory)..\..\src\RobloxCS.Runtime\runtime</RobloxCSRuntimeDir>
   </PropertyGroup>
 

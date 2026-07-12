@@ -1,15 +1,20 @@
 <Project>
 
-  <!-- Task assembly location:
-       - Packaged NuGet: ../tasks/RobloxCS.BuildTask.dll relative to this .targets.
-       - Local dev: consumer sets $(RobloxCSTaskAssembly) to the build output. -->
+  <!-- Task assembly source dir:
+       - Packaged NuGet: ../tasks relative to this .targets.
+       - Local dev: consumer sets $(RobloxCSTaskDir) to the build output dir. -->
   <PropertyGroup>
-    <RobloxCSTaskAssembly Condition="'$(RobloxCSTaskAssembly)' == ''">$(MSBuildThisFileDirectory)..\tasks\RobloxCS.BuildTask.dll</RobloxCSTaskAssembly>
+    <RobloxCSTaskDir Condition="'$(RobloxCSTaskDir)' == ''">$(MSBuildThisFileDirectory)..\tasks</RobloxCSTaskDir>
     <RobloxCSRuntimeDir Condition="'$(RobloxCSRuntimeDir)' == ''">$(MSBuildThisFileDirectory)..\runtime</RobloxCSRuntimeDir>
+    <!-- Load the task from a private copy in the CONSUMER's obj, never from $(RobloxCSTaskDir) itself.
+         A lingering TaskHost then holds the copy, not the source bin, so rebuilding the task project
+         is never blocked (fixes MSB3021/MSB3027 file locks). Absolute path (anchored to the consumer
+         project) so the UsingTask resolves it regardless of where this .targets lives. -->
+    <RobloxCSTaskPrivateDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'rbxcs-tasks'))</RobloxCSTaskPrivateDir>
+    <RobloxCSTaskAssembly>$(RobloxCSTaskPrivateDir)RobloxCS.BuildTask.dll</RobloxCSTaskAssembly>
   </PropertyGroup>
 
-  <!-- TaskHostFactory runs the task in a short-lived out-of-proc host that exits after the build,
-       so the task dll + its deps aren't held locked by a reused MSBuild node (fixes MSB3021/3027). -->
+  <!-- TaskHostFactory runs the task in a short-lived out-of-proc host that exits after the build. -->
   <UsingTask TaskName="RobloxCS.BuildTask.TranspileToLuauTask"
              AssemblyFile="$(RobloxCSTaskAssembly)"
              TaskFactory="TaskHostFactory" />
@@ -18,10 +23,21 @@
              AssemblyFile="$(RobloxCSTaskAssembly)"
              TaskFactory="TaskHostFactory" />
 
+  <!-- Copy the task assembly + its deps into the consumer's obj before any task runs. SkipUnchanged
+       so it only recopies when the task actually changed. -->
+  <Target Name="RobloxCSCopyTasks">
+    <ItemGroup>
+      <_RobloxCSTaskFile Include="$(RobloxCSTaskDir)\*.dll;$(RobloxCSTaskDir)\*.json" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_RobloxCSTaskFile)"
+          DestinationFolder="$(BaseIntermediateOutputPath)rbxcs-tasks"
+          SkipUnchangedFiles="true" />
+  </Target>
+
   <!-- Generate typed C# for @(RobloxCSBinding) Luau/Wally packages into obj/ (gitignored) and feed
        them to the compiler, so bindings are produced at build, not committed. -->
   <Target Name="RobloxCSGenerateBindings" BeforeTargets="CoreCompile"
-          Condition="'@(RobloxCSBinding)' != ''">
+          DependsOnTargets="RobloxCSCopyTasks" Condition="'@(RobloxCSBinding)' != ''">
     <PropertyGroup>
       <RobloxCSBindingsDir>$(IntermediateOutputPath)rbxcs-bindings</RobloxCSBindingsDir>
     </PropertyGroup>
@@ -31,7 +47,8 @@
     </GenerateBindingsTask>
   </Target>
 
-  <Target Name="RobloxCSTranspile" AfterTargets="Compile" DependsOnTargets="ResolveReferences">
+  <Target Name="RobloxCSTranspile" AfterTargets="Compile"
+          DependsOnTargets="ResolveReferences;RobloxCSCopyTasks">
     <!-- Drop SDK-generated sources (AssemblyInfo, GlobalUsings, source-generator output in obj/). -->
     <ItemGroup>
       <_RobloxCSSource Include="@(Compile)"

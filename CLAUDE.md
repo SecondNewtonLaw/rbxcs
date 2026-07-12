@@ -59,9 +59,11 @@ Verify emitted Luau with the Luau CLI vendored in the Fission build:
 (syntax check). Non-trivial transpiler changes: emit the sample, `luau-compile` every file, and run a
 harness asserting behavior. Don't claim verified without running it.
 
-WORKAROUND: background dotnet/Rider MSBuild nodes keep the task dll loaded and lock
-`RobloxCS.BuildTask/bin` on rebuild. If a build fails with MSB3021/MSB3027 file-locked: delete the
-locked `bin` dirs and rebuild, or build with `-nodeReuse:false`. Real fix is queued (F12: AssemblyLoadContext / out-of-proc).
+MSB3021/MSB3027 task-dll lock: **fixed.** The SDK targets (`RobloxCSCopyTasks`) copy the task
+assembly + deps into the consumer's `obj/rbxcs-tasks/` and load from that private copy, so a lingering
+TaskHost holds the copy — never `RobloxCS.BuildTask/bin` — and rebuilding the task project is never
+blocked. If you still hit a lock from a stale host, kill lingering `dotnet` processes; you should not
+need to delete `bin` anymore.
 
 ## Conventions
 
