@@ -579,6 +579,19 @@ function RBXCS.tostringf(v: any, fmt: string): string
 	return tostring(v)
 end
 
+-- SharedTable set via st.Set(k, v) (indexer assignment isn't an expression, so it needs a helper).
+function RBXCS.stset(st: any, key: any, value: any)
+	st[key] = value
+end
+
+-- Parallel.For (Phase 1): correct sequential semantics. Real Actor fan-out replaces this at the
+-- lowering level (a closure can't cross an Actor VM, so parallelism must be compiled, not passed).
+function RBXCS.pfor(from: number, to: number, body: (number) -> ())
+	for i = from, to - 1 do
+		body(i)
+	end
+end
+
 -- C# interpolation alignment `{x,width}`: pad tostring(v) to |width| (negative width = left-justify).
 function RBXCS.align(v: any, width: number): string
 	local s = tostring(v)

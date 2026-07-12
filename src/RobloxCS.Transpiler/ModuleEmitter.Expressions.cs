@@ -207,6 +207,9 @@ internal sealed partial class ModuleEmitter
             return new MethodCall(recv, member, args);
         }
 
+        if (MapParallel(inv, sym, args) is { } par)
+            return par;
+
         var bcl = MapBclCall(inv, sym, args);
         if (bcl is not null)
             return bcl;
@@ -231,6 +234,42 @@ internal sealed partial class ModuleEmitter
             default:
                 return new Call(LowerExpr(inv.Expression), args);
         }
+    }
+
+    // Parallel.For (Phase 1): sequential RBXCS.pfor(from, to, body). Correct semantics; Phase 2
+    // replaces this with worker-module extraction + an Actor-pool driver.
+    private Expression LowerParallelFor(InvocationExpressionSyntax inv, List<Expression> args) =>
+        new Call(new RawExpression("RBXCS.pfor"), args);
+
+    // Parallel primitives: RobloxCS.Parallel.* -> task.*; SharedTable extension ops -> SharedTable.*.
+    private Expression? MapParallel(InvocationExpressionSyntax inv, IMethodSymbol? sym, List<Expression> args)
+    {
+        var ct = sym?.ContainingType?.ToDisplayString();
+        if (ct == "RobloxCS.ParallelLuau")
+            return sym!.Name switch
+            {
+                "Desynchronize" => new Call(new RawExpression("task.desynchronize"), args),
+                "Synchronize" => new Call(new RawExpression("task.synchronize"), args),
+                "For" => LowerParallelFor(inv, args),
+                _ => null,
+            };
+
+        if (ct == "Roblox.SharedTableOps" && sym is { IsExtensionMethod: true })
+        {
+            var recv = inv.Expression is MemberAccessExpressionSyntax ma ? LowerExpr(ma.Expression) : new Identifier("self");
+            Expression[] WithRecv() => new[] { recv }.Concat(args).ToArray();
+            return sym.Name switch
+            {
+                "Get" => new IndexAccess(recv, args[0]),                                  // st[key]
+                "Set" => new Call(new RawExpression("RBXCS.stset"), WithRecv()),          // st[key] = value
+                "Increment" => new Call(new RawExpression("SharedTable.increment"), WithRecv()),
+                "Update" => new Call(new RawExpression("SharedTable.update"), WithRecv()),
+                "Size" => new Call(new RawExpression("SharedTable.size"), new[] { recv }),
+                "Clear" => new Call(new RawExpression("SharedTable.clear"), new[] { recv }),
+                _ => null,
+            };
+        }
+        return null;
     }
 
     // Maps a curated System.* surface (F9) to Luau natives / runtime. Returns null if not a BCL call.
