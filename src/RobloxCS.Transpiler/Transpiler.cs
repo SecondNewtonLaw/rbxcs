@@ -61,6 +61,8 @@ public static class Transpiler
             var module = map.ForTree(tree);
             var emitter = new ModuleEmitter(model, map, module, reification, diagnostics);
             results.Add(emitter.Emit(types));
+            results.AddRange(emitter.Synthetic); // Parallel.For worker modules
+
         }
 
         return new TranspileResult(results, config.RojoProjectJson(), config.ProjectName, diagnostics);

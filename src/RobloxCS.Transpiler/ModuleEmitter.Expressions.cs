@@ -236,10 +236,98 @@ internal sealed partial class ModuleEmitter
         }
     }
 
-    // Parallel.For (Phase 1): sequential RBXCS.pfor(from, to, body). Correct semantics; Phase 2
-    // replaces this with worker-module extraction + an Actor-pool driver.
-    private Expression LowerParallelFor(InvocationExpressionSyntax inv, List<Expression> args) =>
-        new Call(new RawExpression("RBXCS.pfor"), args);
+    // Parallel.For fan-out. Lifts the body into a synthetic Actor-hosted worker Script and emits a
+    // clone-pool driver, IFF the body is self-contained: captures only SharedTables (they cross a VM
+    // by reference) and pulls in no other module. Otherwise falls back to sequential RBXCS.pfor with
+    // a diagnostic — a runtime closure cannot cross an Actor VM, so anything else can't parallelize.
+    private Expression LowerParallelFor(InvocationExpressionSyntax inv, List<Expression> args)
+    {
+        var sequential = new Call(new RawExpression("RBXCS.pfor"), args);
+        if (inv.ArgumentList.Arguments.Count < 3
+            || inv.ArgumentList.Arguments[2].Expression is not AnonymousFunctionExpressionSyntax lambda)
+            return sequential;
+
+        var lambdaParams = lambda switch
+        {
+            SimpleLambdaExpressionSyntax s => new[] { s.Parameter },
+            ParenthesizedLambdaExpressionSyntax p => p.ParameterList.Parameters.ToArray(),
+            _ => Array.Empty<ParameterSyntax>(),
+        };
+        if (lambdaParams.Length != 1)
+            return sequential;
+        var paramSyms = new HashSet<ISymbol>(
+            lambdaParams.Select(p => model.GetDeclaredSymbol(p)).OfType<ISymbol>(), SymbolEqualityComparer.Default);
+
+        var flow = lambda.Body is ExpressionSyntax be ? model.AnalyzeDataFlow(be)
+            : lambda.Body is StatementSyntax st ? model.AnalyzeDataFlow(st) : null;
+        if (flow is not { Succeeded: true })
+            return WarnSequential(inv, sequential, "body could not be analyzed");
+
+        var caps = flow.DataFlowsIn.Where(s => !paramSyms.Contains(s)).ToList();
+        if (caps.Any(s => CapType(s)?.ToDisplayString() != "Roblox.SharedTable"))
+            return WarnSequential(inv, sequential,
+                "body captures non-SharedTable state (pass shared state via a SharedTable to parallelize)");
+
+        // Lower the body; if it pulls in another module, it is not self-contained -> sequential.
+        var snapshot = new Dictionary<string, string>(_externalRequires);
+        var ivar = LuauId(lambdaParams[0].Identifier.Text);
+        var bodyChunk = new Chunk();
+        if (lambda.Body is BlockSyntax blk)
+            foreach (var s in blk.Statements)
+                bodyChunk.Statements.Add(LowerStatement(s));
+        else if (lambda.Body is ExpressionSyntax ex)
+            bodyChunk.Statements.Add(LowerExpressionAsStatement(ex));
+        if (_externalRequires.Count != snapshot.Count)
+        {
+            _externalRequires.Clear();
+            foreach (var kv in snapshot)
+                _externalRequires[kv.Key] = kv.Value;
+            return WarnSequential(inv, sequential, "body references another module");
+        }
+
+        // Synthetic worker: an [Actor] Script binding a parallel "run" handler over a slice.
+        var workerName = $"{module.ModuleName}__pfor{++_pforCounter}";
+        var capNames = caps.Select(c => LuauId(c.Name)).ToList();
+        var handlerParams = new List<string> { "__lo", "__hi", "__done" };
+        handlerParams.AddRange(capNames);
+        var handlerBody = new Chunk();
+        handlerBody.Statements.Add(new NumericFor(ivar, new RawExpression("__lo"),
+            new Binary(new RawExpression("__hi"), "-", new Literal("1")), null, bodyChunk));
+        handlerBody.Statements.Add(new ExpressionStatement(new Call(new RawExpression("SharedTable.increment"),
+            new Expression[] { new RawExpression("__done"), new Literal(LuauString("n")), new Literal("1") })));
+
+        var workerChunk = new Chunk();
+        workerChunk.Statements.Add(new RawStatement($"local RBXCS = {map.RuntimeRequire}"));
+        workerChunk.Statements.Add(new RawStatement("local __actor = script:GetActor()"));
+        workerChunk.Statements.Add(new ExpressionStatement(new MethodCall(new RawExpression("__actor"),
+            "BindToMessageParallel",
+            new Expression[] { new Literal(LuauString("run")), new FunctionExpression(handlerParams, handlerBody) })));
+
+        var workerRel = module.RelativePath.Substring(0, module.RelativePath.Length - module.ModuleName.Length) + workerName;
+        _synthetic.Add(new ModuleResult(workerRel, ModuleKind.Script, LuauWriter.Write(workerChunk), workerName, isActor: true));
+
+        // Driver: RBXCS.parallelFor(<template Actor>, from, to, { caps })
+        var templatePath = module.RequireTargetExpr.Substring(0, module.RequireTargetExpr.Length - module.ModuleName.Length) + workerName;
+        var capTable = new TableConstructor(capNames.Select(n => new TableEntry(null, (Expression)new Identifier(n))).ToList());
+        return new Call(new RawExpression("RBXCS.parallelFor"),
+            new Expression[] { new RawExpression(templatePath), args[0], args[1], capTable });
+    }
+
+    private ITypeSymbol? CapType(ISymbol s) => s switch
+    {
+        ILocalSymbol l => l.Type,
+        IParameterSymbol p => p.Type,
+        IFieldSymbol f => f.Type,
+        _ => null,
+    };
+
+    private Expression WarnSequential(InvocationExpressionSyntax inv, Expression sequential, string why)
+    {
+        var loc = inv.GetLocation().GetLineSpan();
+        diagnostics.Add(new TranspileDiagnostic(
+            $"Parallel.For running sequentially: {why}.", loc.Path, loc.StartLinePosition.Line + 1, loc.StartLinePosition.Character + 1));
+        return sequential;
+    }
 
     // Parallel primitives: RobloxCS.Parallel.* -> task.*; SharedTable extension ops -> SharedTable.*.
     private Expression? MapParallel(InvocationExpressionSyntax inv, IMethodSymbol? sym, List<Expression> args)

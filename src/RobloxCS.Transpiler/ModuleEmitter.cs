@@ -22,6 +22,11 @@ internal sealed partial class ModuleEmitter(SemanticModel model, ModuleMap map, 
     // Non-null while lowering an iterator method body: the Luau param `yield return` calls.
     private string? _yieldVar;
 
+    // Synthetic worker modules produced by Parallel.For fan-out (one Actor-hosted Script per site).
+    private readonly List<ModuleResult> _synthetic = new();
+    public IReadOnlyList<ModuleResult> Synthetic => _synthetic;
+    private int _pforCounter;
+
     public ModuleResult Emit(List<TypeDeclarationSyntax> types)
     {
         var symbols = types

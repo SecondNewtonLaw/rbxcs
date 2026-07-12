@@ -584,12 +584,52 @@ function RBXCS.stset(st: any, key: any, value: any)
 	st[key] = value
 end
 
--- Parallel.For (Phase 1): correct sequential semantics. Real Actor fan-out replaces this at the
--- lowering level (a closure can't cross an Actor VM, so parallelism must be compiled, not passed).
+-- Parallel.For fallback: sequential when the body captures non-SharedTable state (can't cross a VM).
 function RBXCS.pfor(from: number, to: number, body: (number) -> ())
 	for i = from, to - 1 do
 		body(i)
 	end
+end
+
+-- Split [from, to) into up to `pool` contiguous {lo, hi} ranges (hi exclusive). Pure — unit-tested.
+function RBXCS.__pforRanges(from: number, to: number, pool: number): { { number } }
+	local ranges = {}
+	local count = to - from
+	if count <= 0 then
+		return ranges
+	end
+	pool = math.min(pool, count)
+	local per = math.ceil(count / pool)
+	local lo = from
+	while lo < to do
+		table.insert(ranges, { lo, math.min(lo + per, to) })
+		lo += per
+	end
+	return ranges
+end
+
+-- Parallel.For Actor fan-out. `template` is a build-time Actor whose script binds a "run" handler
+-- (lo, hi, done, ...caps); we clone one per range, dispatch, and join on a shared counter. Caps are
+-- SharedTables (cross by reference) — enforced at compile time. Roblox-only (needs Actor/SharedTable).
+function RBXCS.parallelFor(template: any, from: number, to: number, caps: { any })
+	local ranges = RBXCS.__pforRanges(from, to, 16)
+	if #ranges == 0 then
+		return
+	end
+	local done = SharedTable.new()
+	done.n = 0
+	local container = Instance.new("Folder")
+	container.Name = "__pfor"
+	container.Parent = template.Parent
+	for _, r in ranges do
+		local worker = template:Clone()
+		worker.Parent = container
+		worker:SendMessage("run", r[1], r[2], done, table.unpack(caps))
+	end
+	while done.n < #ranges do
+		task.wait()
+	end
+	container:Destroy()
 end
 
 -- C# interpolation alignment `{x,width}`: pad tostring(v) to |width| (negative width = left-justify).
