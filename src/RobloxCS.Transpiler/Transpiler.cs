@@ -9,11 +9,13 @@ public enum RbxContext { Server, Client, Shared }
 
 public enum ModuleKind { Module, Script, LocalScript }
 
-public sealed class ModuleResult(string relativePath, ModuleKind kind, string luau)
+public sealed class ModuleResult(string relativePath, ModuleKind kind, string luau, string moduleName, bool isActor)
 {
     public string RelativePath { get; } = relativePath; // e.g. "Shared/Demo/Animals"
     public ModuleKind Kind { get; } = kind;
     public string Luau { get; } = luau;
+    public string ModuleName { get; } = moduleName; // last path segment; the emitted script's name
+    public bool IsActor { get; } = isActor;         // mount the script beneath an Actor instance
 }
 
 public sealed class TranspileDiagnostic(string message, string filePath, int line, int column)

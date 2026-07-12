@@ -74,11 +74,24 @@ public sealed class TranspileToLuauTask : Microsoft.Build.Utilities.Task
                 ModuleKind.LocalScript => ".client.luau",
                 _ => ".luau",
             };
-            var outPath = Path.Combine(OutputDirectory, m.RelativePath.Replace('/', Path.DirectorySeparatorChar) + suffix);
-            Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
+            string outPath;
+            if (m.IsActor)
+            {
+                // Rojo: a dir with init.meta.json {"className":"Actor"} becomes an Actor instance; the
+                // script inside runs in its own Luau VM (the only place task.desynchronize is legal).
+                var actorDir = Path.Combine(OutputDirectory, m.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+                Directory.CreateDirectory(actorDir);
+                File.WriteAllText(Path.Combine(actorDir, "init.meta.json"), "{\n  \"className\": \"Actor\"\n}\n");
+                outPath = Path.Combine(actorDir, m.ModuleName + suffix);
+            }
+            else
+            {
+                outPath = Path.Combine(OutputDirectory, m.RelativePath.Replace('/', Path.DirectorySeparatorChar) + suffix);
+                Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
+            }
             File.WriteAllText(outPath, m.Luau);
             generated.Add(new TaskItem(outPath));
-            Log.LogMessage(MessageImportance.Normal, $"rbxcs: {m.RelativePath} [{m.Kind}]");
+            Log.LogMessage(MessageImportance.Normal, $"rbxcs: {m.RelativePath} [{m.Kind}{(m.IsActor ? " Actor" : "")}]");
         }
 
         foreach (var d in result.Diagnostics)

@@ -72,6 +72,6 @@ internal sealed partial class ModuleEmitter(SemanticModel model, ModuleMap map, 
                     new Call(new MemberAccess(new Identifier(entry.sym.Name), "Main"), Array.Empty<Expression>())));
         }
 
-        return new ModuleResult(module.RelativePath, module.Kind, LuauWriter.Write(chunk));
+        return new ModuleResult(module.RelativePath, module.Kind, LuauWriter.Write(chunk), module.ModuleName, module.IsActor);
     }
 }

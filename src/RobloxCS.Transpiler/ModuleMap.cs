@@ -4,13 +4,14 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace RobloxCS.Transpiler;
 
-public sealed class ModuleInfo(string relativePath, string requireTargetExpr, RbxContext context, ModuleKind kind, string moduleName)
+public sealed class ModuleInfo(string relativePath, string requireTargetExpr, RbxContext context, ModuleKind kind, string moduleName, bool isActor)
 {
     public string RelativePath { get; } = relativePath;         // "Server/Demo/Animals"
     public string RequireTargetExpr { get; } = requireTargetExpr; // Luau: game:GetService(...).rbxcs.Demo.Animals
     public RbxContext Context { get; } = context;
     public ModuleKind Kind { get; } = kind;
     public string ModuleName { get; } = moduleName;
+    public bool IsActor { get; } = isActor; // [Actor]: runner Script mounts beneath an Actor instance
 }
 
 // Resolves every type to the module it lives in and the Luau require path that reaches it,
@@ -84,7 +85,8 @@ public sealed class ModuleMap
                 target += "." + seg;
             target += "." + moduleName;
 
-            var info = new ModuleInfo(relativePath, target, context, kind, moduleName);
+            var isActor = symbols.Any(s => s.GetAttributes().Any(a => a.AttributeClass?.Name == "ActorAttribute"));
+            var info = new ModuleInfo(relativePath, target, context, kind, moduleName, isActor);
             map._byTree[tree] = info;
             foreach (var s in symbols)
                 map._byType[s] = info;

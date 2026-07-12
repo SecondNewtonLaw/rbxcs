@@ -260,6 +260,24 @@ function RBXCS.await(p: any): any
 	return value
 end
 
+-- Parallel-phase body for a [Parallel] method. task.desynchronize errors unless the running thread
+-- belongs to an Actor VM, so we probe it with pcall: success -> run parallel and resync after;
+-- otherwise run serial. Correct on all exit paths (result + error captured, resync before rethrow).
+function RBXCS.parallel(fn: () -> ...any): ...any
+	local desynced = false
+	if task and (task :: any).desynchronize then
+		desynced = pcall((task :: any).desynchronize)
+	end
+	local r = table.pack(pcall(fn))
+	if desynced then
+		(task :: any).synchronize()
+	end
+	if not r[1] then
+		error(r[2], 0)
+	end
+	return table.unpack(r, 2, r.n)
+end
+
 -- Task combinators.
 function RBXCS.whenAll(promises: { Promise }): Promise
 	return RBXCS.promise(function(resolve, reject)

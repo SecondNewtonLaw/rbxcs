@@ -31,6 +31,16 @@ public sealed class UnsupportedConstructAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(c => Report(c, "fixed"), SyntaxKind.FixedStatement);
         context.RegisterSyntaxNodeAction(c => Report(c, "unsafe"), SyntaxKind.UnsafeStatement);
         context.RegisterSyntaxNodeAction(c => Report(c, "pointer type"), SyntaxKind.PointerType);
+        context.RegisterSyntaxNodeAction(ReportThread, SyntaxKind.ObjectCreationExpression);
+    }
+
+    // Roblox has no shared-memory preemptive threads. Actors are message-passing, isolated VMs — a
+    // faithful System.Threading.Thread is impossible; steer to the [Actor] + [Parallel] model.
+    private static void ReportThread(SyntaxNodeAnalysisContext context)
+    {
+        var oc = (ObjectCreationExpressionSyntax)context.Node;
+        if (context.SemanticModel.GetTypeInfo(oc).Type?.ToDisplayString() == "System.Threading.Thread")
+            Report(context, "System.Threading.Thread (Roblox has no shared-memory threads; use [Actor] + [Parallel] instead)");
     }
 
     private static void Report(SyntaxNodeAnalysisContext context, string what) =>

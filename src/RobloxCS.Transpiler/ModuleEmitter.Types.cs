@@ -73,6 +73,16 @@ internal sealed partial class ModuleEmitter
             else if (method.ExpressionBody is not null)
                 body.Statements.Add(new Return(CopyIfNeeded(method.ExpressionBody.Expression, LowerExpr(method.ExpressionBody.Expression))));
 
+            // [Parallel] -> body runs desynchronized (parallel phase) via RBXCS.parallel, serial fallback.
+            if (msym?.GetAttributes().Any(a => a.AttributeClass?.Name == "ParallelAttribute") ?? false)
+            {
+                var wrapped = new Chunk();
+                wrapped.Statements.Add(new Return(new Call(
+                    new MemberAccess(new Identifier("RBXCS"), "parallel"),
+                    new[] { (Expression)new FunctionExpression(Array.Empty<string>(), body) })));
+                body = wrapped;
+            }
+
             if (isIterator)
             {
                 var wrapped = new Chunk();
