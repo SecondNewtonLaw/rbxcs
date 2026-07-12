@@ -551,4 +551,50 @@ function RBXCS.Linq.all(src: any, pred: (any) -> boolean): boolean
 	return ok
 end
 
+-- C# value.ToString(format) for numbers: D/X/x/F specifiers (+ optional precision); else tostring.
+function RBXCS.tostringf(v: any, fmt: string): string
+	if type(v) ~= "number" then
+		return tostring(v)
+	end
+	local spec = string.sub(fmt, 1, 1)
+	local prec = tonumber(string.sub(fmt, 2))
+	if spec == "D" or spec == "d" then
+		local s = string.format("%d", v)
+		if prec then
+			local neg = string.sub(s, 1, 1) == "-"
+			local digits = if neg then string.sub(s, 2) else s
+			if #digits < prec then
+				digits = string.rep("0", prec - #digits) .. digits
+			end
+			return (if neg then "-" else "") .. digits
+		end
+		return s
+	elseif spec == "X" then
+		return string.format(if prec then "%0" .. prec .. "X" else "%X", v)
+	elseif spec == "x" then
+		return string.format(if prec then "%0" .. prec .. "x" else "%x", v)
+	elseif spec == "F" or spec == "f" then
+		return string.format("%." .. (prec or 2) .. "f", v)
+	end
+	return tostring(v)
+end
+
+-- C# object.GetHashCode() for primitives. ponytail: value-based, stable within a run; not a
+-- cryptographic or cross-run-stable hash (C# doesn't guarantee cross-run stability either).
+function RBXCS.hashCode(v: any): number
+	local t = type(v)
+	if t == "number" then
+		return v
+	elseif t == "boolean" then
+		return if v then 1 else 0
+	elseif t == "string" then
+		local h = 0
+		for i = 1, #v do
+			h = (h * 31 + string.byte(v, i)) % 2147483648
+		end
+		return h
+	end
+	return 0
+end
+
 return RBXCS

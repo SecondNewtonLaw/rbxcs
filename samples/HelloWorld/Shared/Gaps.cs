@@ -66,4 +66,13 @@ public class Gaps
 
     // parameterless ToString on a primitive -> tostring (was: n:ToString() -> runtime error).
     public string NumStr() => 42.ToString() + "/" + true.ToString(); // "42/true"
+
+    // ToString(format) -> RBXCS.tostringf; Equals -> ==; GetHashCode -> RBXCS.hashCode.
+    public string Formats()
+    {
+        int n = 255;
+        return n.ToString("X") + "|" + n.ToString("D5") + "|" + (3.14159).ToString("F2"); // "FF|00255|3.14"
+    }
+
+    public bool Eq() => 5.Equals(5) && !"a".Equals("b") && 5.GetHashCode() == 5;
 }

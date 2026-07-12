@@ -31,6 +31,10 @@ public sealed class UnsupportedConstructAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(c => Report(c, "fixed"), SyntaxKind.FixedStatement);
         context.RegisterSyntaxNodeAction(c => Report(c, "unsafe"), SyntaxKind.UnsafeStatement);
         context.RegisterSyntaxNodeAction(c => Report(c, "pointer type"), SyntaxKind.PointerType);
+        // `checked` has no cheap Luau overflow detection (numbers are f64); `unchecked` is the default
+        // behavior and lowers faithfully, so it is not flagged.
+        context.RegisterSyntaxNodeAction(c => Report(c, "checked (integer overflow detection)"), SyntaxKind.CheckedExpression);
+        context.RegisterSyntaxNodeAction(c => Report(c, "checked (integer overflow detection)"), SyntaxKind.CheckedStatement);
         context.RegisterSyntaxNodeAction(ReportThread, SyntaxKind.ObjectCreationExpression);
     }
 

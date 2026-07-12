@@ -17,6 +17,8 @@ internal sealed partial class ModuleEmitter
                 return LowerLiteral(lit);
             case ParenthesizedExpressionSyntax paren:
                 return LowerExpr(paren.Expression);
+            case CheckedExpressionSyntax chk: // checked(x)/unchecked(x): overflow semantics erased (Luau f64)
+                return LowerExpr(chk.Expression);
             case ThisExpressionSyntax:
                 return new Identifier("self");
             case IdentifierNameSyntax id:
@@ -237,10 +239,20 @@ internal sealed partial class ModuleEmitter
         var ct = sym?.ContainingType?.OriginalDefinition.ToDisplayString();
         var recv = inv.Expression is MemberAccessExpressionSyntax ma ? LowerExpr(ma.Expression) : new Identifier("self");
 
-        // Parameterless object/primitive ToString() -> tostring(recv). A user-overridden ToString has
-        // source refs, so it falls through to a normal recv:ToString() call into the emitted method.
-        if (sym is { Name: "ToString", Parameters.Length: 0 } && sym.DeclaringSyntaxReferences.Length == 0)
-            return new Call(new RawExpression("tostring"), new[] { recv });
+        // Object/primitive methods with no user override (no source refs) -> Luau natives / runtime.
+        // A user-overridden member has source refs and falls through to a normal recv:Member() call.
+        if (sym is { DeclaringSyntaxReferences.Length: 0 } obj)
+        {
+            if (obj is { Name: "ToString", Parameters.Length: 0 })
+                return new Call(new RawExpression("tostring"), new[] { recv });
+            if (obj is { Name: "ToString", Parameters.Length: 1 }
+                && obj.Parameters[0].Type.SpecialType == SpecialType.System_String)
+                return new Call(new RawExpression("RBXCS.tostringf"), new[] { recv, args[0] }); // ToString(format)
+            if (obj is { Name: "Equals", Parameters.Length: 1 })
+                return new Paren(new Binary(recv, "==", args[0])); // parens: may sit under `not`/arithmetic
+            if (obj is { Name: "GetHashCode", Parameters.Length: 0 })
+                return new Call(new RawExpression("RBXCS.hashCode"), new[] { recv });
+        }
 
         if (ct == "System.Math")
         {

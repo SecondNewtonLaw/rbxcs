@@ -27,6 +27,7 @@ internal sealed partial class ModuleEmitter
         ContinueStatementSyntax => new Continue(),
         SwitchStatementSyntax s => LowerSwitch(s),
         BlockSyntax b => new DoBlock(LowerBlock(b)),
+        CheckedStatementSyntax c => new MultiStatement(c.Block.Statements.Select(LowerStatement).ToList()), // checked/unchecked {}: erased
         _ => new RawStatement($"-- [rbxcs] unsupported statement: {stmt.Kind()}"),
     };
 
