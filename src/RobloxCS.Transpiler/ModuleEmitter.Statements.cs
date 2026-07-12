@@ -148,6 +148,12 @@ internal sealed partial class ModuleEmitter
         {
             case AssignmentExpressionSyntax { RawKind: (int)SyntaxKind.SimpleAssignmentExpression } asn:
                 return LowerSimpleAssignment(asn);
+            case AssignmentExpressionSyntax asn when IsBitwiseCompound(asn): // a &= b -> a = bit32.band(a, b)
+            {
+                var l = LowerExpr(asn.Left);
+                var isBool = model.GetTypeInfo(asn.Left).Type?.SpecialType == SpecialType.System_Boolean;
+                return new Assignment(l, MapBitwise(asn.OperatorToken.Text.TrimEnd('='), l, LowerExpr(asn.Right), isBool)!);
+            }
             case AssignmentExpressionSyntax asn: // compound: a += b  (Luau-native)
                 return new CompoundAssignment(LowerExpr(asn.Left), CompoundOp(asn), LowerExpr(asn.Right));
             case PostfixUnaryExpressionSyntax p:
@@ -190,6 +196,9 @@ internal sealed partial class ModuleEmitter
 
     private Statement IncrementOf(ExpressionSyntax target, string op) =>
         new CompoundAssignment(LowerExpr(target), op == "++" ? "+" : "-", new Literal("1"));
+
+    private static bool IsBitwiseCompound(AssignmentExpressionSyntax asn) =>
+        asn.OperatorToken.Text is "&=" or "|=" or "^=" or "<<=" or ">>=";
 
     private string CompoundOp(AssignmentExpressionSyntax asn)
     {

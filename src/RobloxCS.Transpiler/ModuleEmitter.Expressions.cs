@@ -385,6 +385,10 @@ internal sealed partial class ModuleEmitter
         var right = LowerExpr(bin.Right);
         var op = bin.OperatorToken.Text;
 
+        // Luau has no bitwise operators: &/|/^/<</>> map to bit32.* (on bool, &/|/^ are logical).
+        if (MapBitwise(op, left, right, IsBoolOperand(bin)) is { } bw)
+            return bw;
+
         // string `+` -> Luau `..`
         if (op == "+" && IsStringConcat(bin))
             op = "..";
@@ -397,6 +401,25 @@ internal sealed partial class ModuleEmitter
         };
         return new Binary(left, op, right);
     }
+
+    // &/|/^/<</>> -> Luau. Integer operands use bit32 (32-bit unsigned semantics — differs from C#
+    // signed int on overflow); bool operands use logical and/or, ^ as `~=`. Returns null if not bitwise.
+    private Expression? MapBitwise(string op, Expression left, Expression right, bool isBool) => op switch
+    {
+        "&" => isBool ? new Binary(left, "and", right) : Bit("band", left, right),
+        "|" => isBool ? new Binary(left, "or", right) : Bit("bor", left, right),
+        "^" => isBool ? new Binary(left, "~=", right) : Bit("bxor", left, right),
+        "<<" => Bit("lshift", left, right),
+        ">>" => Bit("rshift", left, right),
+        _ => null,
+    };
+
+    private static Expression Bit(string fn, Expression a, Expression b) =>
+        new Call(new RawExpression($"bit32.{fn}"), new[] { a, b });
+
+    private bool IsBoolOperand(BinaryExpressionSyntax bin) =>
+        model.GetTypeInfo(bin.Left).Type?.SpecialType == SpecialType.System_Boolean
+        || model.GetTypeInfo(bin.Right).Type?.SpecialType == SpecialType.System_Boolean;
 
     // Lambda / anonymous-method body: expression body -> `return expr`; block -> lowered statements.
     private Chunk LambdaBody(CSharpSyntaxNode body)
@@ -432,6 +455,7 @@ internal sealed partial class ModuleEmitter
             "!" => new Unary("not", operand),
             "-" => new Unary("-", operand),
             "+" => operand,
+            "~" => new Call(new RawExpression("bit32.bnot"), new[] { operand }), // bitwise complement
             _ => new RawExpression($"nil --[[rbxcs unsupported unary: {pre.OperatorToken.Text}]]"),
         };
     }
