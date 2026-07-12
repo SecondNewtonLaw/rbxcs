@@ -70,11 +70,11 @@ internal sealed partial class ModuleEmitter
             case AwaitExpressionSyntax aw:
                 return new Call(new MemberAccess(new Identifier("RBXCS"), "await"), new[] { LowerExpr(aw.Expression) });
             case SimpleLambdaExpressionSyntax sl:
-                return new FunctionExpression(new[] { sl.Parameter.Identifier.Text }, LambdaBody(sl.Body));
+                return new FunctionExpression(new[] { LuauId(sl.Parameter.Identifier.Text) }, LambdaBody(sl.Body));
             case ParenthesizedLambdaExpressionSyntax pl:
-                return new FunctionExpression(pl.ParameterList.Parameters.Select(p => p.Identifier.Text).ToList(), LambdaBody(pl.Body));
+                return new FunctionExpression(pl.ParameterList.Parameters.Select(p => LuauId(p.Identifier.Text)).ToList(), LambdaBody(pl.Body));
             case AnonymousMethodExpressionSyntax am:
-                return new FunctionExpression(am.ParameterList?.Parameters.Select(p => p.Identifier.Text).ToList() ?? new List<string>(), LambdaBody(am.Body));
+                return new FunctionExpression(am.ParameterList?.Parameters.Select(p => LuauId(p.Identifier.Text)).ToList() ?? new List<string>(), LambdaBody(am.Body));
             case ConditionalAccessExpressionSyntax ca:
                 return LowerConditionalAccess(ca);
             case CastExpressionSyntax cast:
@@ -89,6 +89,9 @@ internal sealed partial class ModuleEmitter
         SyntaxKind.NullLiteralExpression => new RawExpression("nil"),
         SyntaxKind.TrueLiteralExpression => new Literal("true"),
         SyntaxKind.FalseLiteralExpression => new Literal("false"),
+        SyntaxKind.NumericLiteralExpression => new Literal(NormalizeNumber(lit.Token.Text)),
+        SyntaxKind.StringLiteralExpression => new Literal(LuauString(lit.Token.Value as string ?? "")),
+        SyntaxKind.CharacterLiteralExpression => new Literal(LuauString(lit.Token.Value?.ToString() ?? "")),
         _ => new Literal(lit.Token.Text),
     };
 
@@ -103,7 +106,7 @@ internal sealed partial class ModuleEmitter
         switch (sym)
         {
             case IParameterSymbol or ILocalSymbol:
-                return new Identifier(id.Identifier.Text);
+                return new Identifier(LuauId(id.Identifier.Text));
             case IEventSymbol { IsStatic: false }:
                 return new MemberAccess(new Identifier("self"), id.Identifier.Text);
             case IPropertySymbol { IsStatic: false } bp when IsBodiedProperty(bp):
@@ -389,6 +392,12 @@ internal sealed partial class ModuleEmitter
         if (MapBitwise(op, left, right, IsBoolOperand(bin)) is { } bw)
             return bw;
 
+        // Integer / and %: unsigned operands use native // and % (exact, both >= 0). Signed operands
+        // need helpers — Luau // floors toward -inf but C# truncates toward zero, and Luau % takes the
+        // divisor's sign while C# takes the dividend's.
+        if (MapIntDivMod(op, left, right, model.GetTypeInfo(bin.Left).Type, model.GetTypeInfo(bin.Right).Type) is { } dm)
+            return dm;
+
         // string `+` -> Luau `..`
         if (op == "+" && IsStringConcat(bin))
             op = "..";
@@ -420,6 +429,27 @@ internal sealed partial class ModuleEmitter
     private bool IsBoolOperand(BinaryExpressionSyntax bin) =>
         model.GetTypeInfo(bin.Left).Type?.SpecialType == SpecialType.System_Boolean
         || model.GetTypeInfo(bin.Right).Type?.SpecialType == SpecialType.System_Boolean;
+
+    private static bool IsIntegral(ITypeSymbol? t) => t?.SpecialType is
+        SpecialType.System_Byte or SpecialType.System_SByte or SpecialType.System_Int16
+        or SpecialType.System_UInt16 or SpecialType.System_Int32 or SpecialType.System_UInt32
+        or SpecialType.System_Int64 or SpecialType.System_UInt64;
+
+    private static bool IsUnsigned(ITypeSymbol? t) => t?.SpecialType is
+        SpecialType.System_Byte or SpecialType.System_UInt16 or SpecialType.System_UInt32
+        or SpecialType.System_UInt64;
+
+    // Integer / and % -> Luau. Unsigned operands map to native // and % (operands >= 0 so exact);
+    // signed operands use RBXCS.idiv/imod (truncate toward zero, dividend-signed remainder). null if
+    // not an integer /,%.
+    private Expression? MapIntDivMod(string op, Expression left, Expression right, ITypeSymbol? lt, ITypeSymbol? rt)
+    {
+        if ((op != "/" && op != "%") || !IsIntegral(lt) || !IsIntegral(rt))
+            return null;
+        if (IsUnsigned(lt) && IsUnsigned(rt))
+            return new Binary(left, op == "/" ? "//" : "%", right);
+        return new Call(new RawExpression(op == "/" ? "RBXCS.idiv" : "RBXCS.imod"), new[] { left, right });
+    }
 
     // Lambda / anonymous-method body: expression body -> `return expr`; block -> lowered statements.
     private Chunk LambdaBody(CSharpSyntaxNode body)

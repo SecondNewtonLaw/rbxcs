@@ -22,7 +22,7 @@ internal sealed partial class ModuleEmitter
         WhileStatementSyntax w => new WhileStatement(LowerExpr(w.Condition), LowerBlock(w.Statement)),
         DoStatementSyntax d => new RepeatStatement(LowerBlock(d.Statement), new Unary("not", new Paren(LowerExpr(d.Condition)))),
         ForStatementSyntax f => LowerFor(f),
-        ForEachStatementSyntax fe => new GenericFor(new[] { "_", fe.Identifier.Text }, LowerExpr(fe.Expression), LowerBlock(fe.Statement)),
+        ForEachStatementSyntax fe => new GenericFor(new[] { "_", LuauId(fe.Identifier.Text) }, LowerExpr(fe.Expression), LowerBlock(fe.Statement)),
         BreakStatementSyntax => new Break(),
         ContinueStatementSyntax => new Continue(),
         SwitchStatementSyntax s => LowerSwitch(s),
@@ -34,7 +34,7 @@ internal sealed partial class ModuleEmitter
     {
         var v = local.Declaration.Variables[0]; // multi-declarator -> F-later
         var value = v.Initializer is null ? null : CopyIfNeeded(v.Initializer.Value, LowerExpr(v.Initializer.Value));
-        return new LocalDeclaration(v.Identifier.Text, value);
+        return new LocalDeclaration(LuauId(v.Identifier.Text), value);
     }
 
     // Normal `return` outside a guarded region; inside try/catch it becomes a control marker.
@@ -92,7 +92,7 @@ internal sealed partial class ModuleEmitter
         {
             var handler = new Chunk();
             if (clause.Declaration is { Identifier.ValueText.Length: > 0 } d)
-                handler.Statements.Add(new LocalDeclaration(d.Identifier.Text, new Identifier(ExVar)));
+                handler.Statements.Add(new LocalDeclaration(LuauId(d.Identifier.Text), new Identifier(ExVar)));
             foreach (var s in clause.Block.Statements)
                 handler.Statements.Add(LowerStatement(s));
             if (!EndsInTerminator(clause.Block))
@@ -153,6 +153,16 @@ internal sealed partial class ModuleEmitter
                 var l = LowerExpr(asn.Left);
                 var isBool = model.GetTypeInfo(asn.Left).Type?.SpecialType == SpecialType.System_Boolean;
                 return new Assignment(l, MapBitwise(asn.OperatorToken.Text.TrimEnd('='), l, LowerExpr(asn.Right), isBool)!);
+            }
+            case AssignmentExpressionSyntax asn when asn.OperatorToken.Text is "/=" or "%="
+                && IsIntegral(model.GetTypeInfo(asn.Left).Type) && IsIntegral(model.GetTypeInfo(asn.Right).Type):
+            {
+                var l = LowerExpr(asn.Left);
+                var slash = asn.OperatorToken.Text == "/=";
+                if (IsUnsigned(model.GetTypeInfo(asn.Left).Type) && IsUnsigned(model.GetTypeInfo(asn.Right).Type))
+                    return new CompoundAssignment(l, slash ? "//" : "%", LowerExpr(asn.Right)); // native //= / %=
+                var fn = slash ? "RBXCS.idiv" : "RBXCS.imod"; // signed: a /= b -> a = RBXCS.idiv(a, b)
+                return new Assignment(l, new Call(new RawExpression(fn), new[] { l, LowerExpr(asn.Right) }));
             }
             case AssignmentExpressionSyntax asn: // compound: a += b  (Luau-native)
                 return new CompoundAssignment(LowerExpr(asn.Left), CompoundOp(asn), LowerExpr(asn.Right));
@@ -250,7 +260,7 @@ internal sealed partial class ModuleEmitter
         {
             var cond = new Call(new MemberAccess(new Identifier("RBXCS"), "is"),
                 new[] { LowerExpr(isp.Expression), TypeToken(model.GetTypeInfo(dp.Type).Type) });
-            body.Statements.Insert(0, new LocalDeclaration(v.Identifier.Text, LowerExpr(isp.Expression)));
+            body.Statements.Insert(0, new LocalDeclaration(LuauId(v.Identifier.Text), LowerExpr(isp.Expression)));
             return new IfBranch(cond, body);
         }
         return new IfBranch(LowerExpr(condition), body);
@@ -276,7 +286,7 @@ internal sealed partial class ModuleEmitter
         var outer = new Chunk();
         if (f.Declaration is not null)
             foreach (var v in f.Declaration.Variables)
-                outer.Statements.Add(new LocalDeclaration(v.Identifier.Text,
+                outer.Statements.Add(new LocalDeclaration(LuauId(v.Identifier.Text),
                     v.Initializer is null ? null : LowerExpr(v.Initializer.Value)));
         foreach (var init in f.Initializers)
             outer.Statements.Add(new ExpressionStatement(LowerExpr(init)));
@@ -345,7 +355,7 @@ internal sealed partial class ModuleEmitter
         var start = LowerExpr(decl.Variables[0].Initializer!.Value);
         var bound = LowerExpr(cond.Right);
         var stop = opText == "<" ? new Binary(bound, "-", new Literal("1")) : bound;
-        numeric = new NumericFor(name, start, stop, step, LowerBlock(f.Statement));
+        numeric = new NumericFor(LuauId(name), start, stop, step, LowerBlock(f.Statement));
         return true;
     }
 

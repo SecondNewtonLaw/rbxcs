@@ -69,6 +69,18 @@ function RBXCS.default(token: any): any
 	return nil
 end
 
+-- C# signed integer division truncates toward zero. Luau `//` exists but floors toward -inf, so it
+-- only matches for non-negative operands (unsigned types use `//` directly; signed use this).
+function RBXCS.idiv(a: number, b: number): number
+	local q = a / b
+	return if q >= 0 then math.floor(q) else math.ceil(q)
+end
+
+-- C# integer remainder: sign follows the dividend (Luau `%` follows the divisor).
+function RBXCS.imod(a: number, b: number): number
+	return a - RBXCS.idiv(a, b) * b
+end
+
 -- new T() via a reified token: class/struct tokens construct; primitive tokens give their default.
 function RBXCS.new(token: any, ...: any): any
 	if type(token) == "table" then

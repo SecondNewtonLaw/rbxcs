@@ -48,7 +48,7 @@ internal sealed partial class ModuleEmitter
                 foreach (var s in ctor.Body.Statements)
                     body.Statements.Add(LowerStatement(s));
 
-            var pars = ctor?.ParameterList.Parameters.Select(p => p.Identifier.Text).ToList() ?? new List<string>();
+            var pars = ctor?.ParameterList.Parameters.Select(p => LuauId(p.Identifier.Text)).ToList() ?? new List<string>();
             output.Add(new FunctionStatement(new[] { name, "__ctor" }, isMethod: true, pars, body));
         }
 
@@ -93,7 +93,7 @@ internal sealed partial class ModuleEmitter
                 body = wrapped;
             }
 
-            var pars = method.ParameterList.Parameters.Select(p => p.Identifier.Text).ToList();
+            var pars = method.ParameterList.Parameters.Select(p => LuauId(p.Identifier.Text)).ToList();
             if (reifying)
                 pars.AddRange(msym!.TypeParameters.Select(tp => $"__t_{tp.Name}"));
 
@@ -154,7 +154,7 @@ internal sealed partial class ModuleEmitter
     private void EmitIndexer(string typeName, IndexerDeclarationSyntax indexer, List<Statement> output)
     {
         var isStatic = indexer.Modifiers.Any(SyntaxKind.StaticKeyword);
-        var idxPars = indexer.ParameterList.Parameters.Select(p => p.Identifier.Text).ToList();
+        var idxPars = indexer.ParameterList.Parameters.Select(p => LuauId(p.Identifier.Text)).ToList();
 
         if (indexer.ExpressionBody is not null)
         {

@@ -139,6 +139,48 @@ internal sealed partial class ModuleEmitter
         return _thisModuleTypes.Contains(type.Name) || map.TryGetType(type, out _);
     }
 
+    // Luau reserved words (Lua 5.1 baseline). A C# identifier colliding with one is suffixed `_`;
+    // applied at both declaration and use so it stays consistent. ponytail: a user with both `end`
+    // and `end_` would collide — accepted, vanishingly rare.
+    private static readonly HashSet<string> LuauReserved = new()
+    {
+        "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "if", "in",
+        "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while",
+    };
+
+    private static string LuauId(string name) => LuauReserved.Contains(name) ? name + "_" : name;
+
+    // Strips C# numeric suffixes (f/d/m/u/l) and digit-separator underscores; Luau has one number
+    // type and no suffixes. Hex/binary keep their digits (only integer suffixes trimmed).
+    private static string NormalizeNumber(string t)
+    {
+        t = t.Replace("_", "");
+        var hexOrBin = t.StartsWith("0x") || t.StartsWith("0X") || t.StartsWith("0b") || t.StartsWith("0B");
+        return hexOrBin ? t.TrimEnd('u', 'U', 'l', 'L') : t.TrimEnd('f', 'F', 'd', 'D', 'm', 'M', 'u', 'U', 'l', 'L');
+    }
+
+    // Escapes a raw string value into a Luau double-quoted literal. Built from the parsed token value,
+    // so C# verbatim strings and \uXXXX escapes are handled uniformly.
+    private static string LuauString(string s)
+    {
+        var sb = new System.Text.StringBuilder("\"");
+        foreach (var c in s)
+            switch (c)
+            {
+                case '"': sb.Append("\\\""); break;
+                case '\\': sb.Append("\\\\"); break;
+                case '\n': sb.Append("\\n"); break;
+                case '\r': sb.Append("\\r"); break;
+                case '\t': sb.Append("\\t"); break;
+                default:
+                    if (c < 0x20) sb.Append("\\x").Append(((int)c).ToString("x2"));
+                    else sb.Append(c);
+                    break;
+            }
+        sb.Append('"');
+        return sb.ToString();
+    }
+
     private int InheritanceDepth(INamedTypeSymbol sym)
     {
         var d = 0;
