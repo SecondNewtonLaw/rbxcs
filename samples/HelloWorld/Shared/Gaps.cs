@@ -53,4 +53,17 @@ public class Gaps
         int back = (int)up;       // 66
         return code + diff + back; // 66 + 25 + 66 = 157
     }
+
+    // char increment/decrement must keep the value a char (was: string arithmetic -> runtime error).
+    public string CharShift()
+    {
+        char ch = 'A';
+        ch++;      // 'B'
+        ch++;      // 'C'
+        ch--;      // 'B'
+        return ch.ToString(); // "B" (char ToString -> tostring)
+    }
+
+    // parameterless ToString on a primitive -> tostring (was: n:ToString() -> runtime error).
+    public string NumStr() => 42.ToString() + "/" + true.ToString(); // "42/true"
 }

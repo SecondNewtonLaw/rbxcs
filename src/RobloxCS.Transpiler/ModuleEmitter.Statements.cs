@@ -215,8 +215,18 @@ internal sealed partial class ModuleEmitter
         return new Assignment(LowerExpr(asn.Left), rhs);
     }
 
-    private Statement IncrementOf(ExpressionSyntax target, string op) =>
-        new CompoundAssignment(LowerExpr(target), op == "++" ? "+" : "-", new Literal("1"));
+    private Statement IncrementOf(ExpressionSyntax target, string op)
+    {
+        var l = LowerExpr(target);
+        if (model.GetTypeInfo(target).Type?.SpecialType == SpecialType.System_Char) // ch++/ch-- stays a char
+            return new Assignment(l, CharShift(l, op == "++" ? "+" : "-", new Literal("1")));
+        return new CompoundAssignment(l, op == "++" ? "+" : "-", new Literal("1"));
+    }
+
+    // char lvalue arithmetic: string.char(string.byte(ch) op n) — keeps the result a 1-char string.
+    private static Expression CharShift(Expression charExpr, string op, Expression amount) =>
+        new Call(new RawExpression("string.char"),
+            new[] { (Expression)new Binary(new Call(new RawExpression("string.byte"), new[] { charExpr }), op, amount) });
 
     private static bool IsBitwiseCompound(AssignmentExpressionSyntax asn) =>
         asn.OperatorToken.Text is "&=" or "|=" or "^=" or "<<=" or ">>=";

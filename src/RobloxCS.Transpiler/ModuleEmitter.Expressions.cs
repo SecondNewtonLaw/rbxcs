@@ -237,6 +237,11 @@ internal sealed partial class ModuleEmitter
         var ct = sym?.ContainingType?.OriginalDefinition.ToDisplayString();
         var recv = inv.Expression is MemberAccessExpressionSyntax ma ? LowerExpr(ma.Expression) : new Identifier("self");
 
+        // Parameterless object/primitive ToString() -> tostring(recv). A user-overridden ToString has
+        // source refs, so it falls through to a normal recv:ToString() call into the emitted method.
+        if (sym is { Name: "ToString", Parameters.Length: 0 } && sym.DeclaringSyntaxReferences.Length == 0)
+            return new Call(new RawExpression("tostring"), new[] { recv });
+
         if (ct == "System.Math")
         {
             var fn = sym!.Name switch
