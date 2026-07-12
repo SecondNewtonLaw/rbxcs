@@ -17,6 +17,12 @@
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <!-- Luau/Wally packages -> typed C# bindings generated into obj/ at build (never committed). -->
+  <ItemGroup>
+    <RobloxCSBinding Include="Shared\Pkg" Namespace="Vendor" ModuleBase="Shared/Pkg" />
+    <RobloxCSBinding Include="Shared\Packages\Signal.luau" Namespace="Demo" Wally="true" Alias="Signal" />
+  </ItemGroup>
+
   <!-- P0 LOCAL WIRING: consume the SDK from source. Packaged consumers need only
        a single <PackageReference Include="RobloxCS.Sdk" />. -->
   <PropertyGroup>

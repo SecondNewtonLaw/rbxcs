@@ -14,6 +14,23 @@
              AssemblyFile="$(RobloxCSTaskAssembly)"
              TaskFactory="TaskHostFactory" />
 
+  <UsingTask TaskName="RobloxCS.BuildTask.GenerateBindingsTask"
+             AssemblyFile="$(RobloxCSTaskAssembly)"
+             TaskFactory="TaskHostFactory" />
+
+  <!-- Generate typed C# for @(RobloxCSBinding) Luau/Wally packages into obj/ (gitignored) and feed
+       them to the compiler, so bindings are produced at build, not committed. -->
+  <Target Name="RobloxCSGenerateBindings" BeforeTargets="CoreCompile"
+          Condition="'@(RobloxCSBinding)' != ''">
+    <PropertyGroup>
+      <RobloxCSBindingsDir>$(IntermediateOutputPath)rbxcs-bindings</RobloxCSBindingsDir>
+    </PropertyGroup>
+    <GenerateBindingsTask Bindings="@(RobloxCSBinding)" OutputDirectory="$(RobloxCSBindingsDir)">
+      <Output TaskParameter="GeneratedFiles" ItemName="Compile" />
+      <Output TaskParameter="GeneratedFiles" ItemName="FileWrites" />
+    </GenerateBindingsTask>
+  </Target>
+
   <Target Name="RobloxCSTranspile" AfterTargets="Compile" DependsOnTargets="ResolveReferences">
     <!-- Drop SDK-generated sources (AssemblyInfo, GlobalUsings, source-generator output in obj/). -->
     <ItemGroup>

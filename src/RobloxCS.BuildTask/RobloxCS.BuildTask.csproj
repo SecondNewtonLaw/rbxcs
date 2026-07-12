@@ -15,6 +15,7 @@
     <!-- Provided by the MSBuild host; do not ship. -->
     <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.14.8" PrivateAssets="all" ExcludeAssets="runtime" />
     <ProjectReference Include="..\RobloxCS.Transpiler\RobloxCS.Transpiler.csproj" />
+    <ProjectReference Include="..\RobloxCS.Bindgen\RobloxCS.Bindgen.csproj" />
   </ItemGroup>
 
 </Project>
