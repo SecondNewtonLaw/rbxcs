@@ -9,7 +9,7 @@ internal sealed partial class ModuleEmitter
 {
     private void LowerType(TypeDeclarationSyntax decl, INamedTypeSymbol sym, List<Statement> output)
     {
-        var name = sym.Name;
+        var name = LuauId(sym.Name); // class local + method-owner name; may collide with a Luau keyword
         var isStruct = sym.TypeKind == TypeKind.Struct;
 
         var baseType = isStruct ? null : sym.BaseType;
@@ -98,7 +98,7 @@ internal sealed partial class ModuleEmitter
                 pars.AddRange(msym!.TypeParameters.Select(tp => $"__t_{tp.Name}"));
 
             output.Add(new FunctionStatement(
-                new[] { name, method.Identifier.Text }, isMethod: !isStatic, pars, body));
+                new[] { name, LuauId(method.Identifier.Text) }, isMethod: !isStatic, pars, body));
             _tokenParams = new HashSet<string>();
         }
 
@@ -118,10 +118,10 @@ internal sealed partial class ModuleEmitter
         {
             var sym = model.GetDeclaredSymbol(member);
             var value = sym?.ConstantValue is not null ? Convert.ToInt64(sym.ConstantValue) : next;
-            entries.Add(new TableEntry(member.Identifier.Text, new Literal(value.ToString())));
+            entries.Add(new TableEntry(LuauId(member.Identifier.Text), new Literal(value.ToString())));
             next = value + 1;
         }
-        return new LocalDeclaration(e.Identifier.Text, new TableConstructor(entries));
+        return new LocalDeclaration(LuauId(e.Identifier.Text), new TableConstructor(entries));
     }
 
     // Bodied (non-auto) properties -> get_X / set_X accessor methods. Auto-props stay table fields.
@@ -186,7 +186,7 @@ internal sealed partial class ModuleEmitter
         else if (acc.ExpressionBody is not null)
             body.Statements.Add(acc.Keyword.IsKind(SyntaxKind.GetKeyword)
                 ? new Return(LowerExpr(acc.ExpressionBody.Expression))
-                : new ExpressionStatement(LowerExpr(acc.ExpressionBody.Expression)));
+                : LowerExpressionAsStatement(acc.ExpressionBody.Expression)); // setter body: `_n = value` etc.
         return body;
     }
 
@@ -217,10 +217,10 @@ internal sealed partial class ModuleEmitter
             foreach (var v in field.Declaration.Variables)
                 if (v.Initializer is not null)
                     inits.Add(new Assignment(
-                        new MemberAccess(new Identifier("self"), v.Identifier.Text),
+                        new MemberAccess(new Identifier("self"), LuauId(v.Identifier.Text)),
                         CopyIfNeeded(v.Initializer.Value, LowerExpr(v.Initializer.Value))));
                 else if (ZeroDefault(fieldType) is { } zero)
-                    inits.Add(new Assignment(new MemberAccess(new Identifier("self"), v.Identifier.Text), zero)); // C# value-type fields zero-init
+                    inits.Add(new Assignment(new MemberAccess(new Identifier("self"), LuauId(v.Identifier.Text)), zero)); // C# value-type fields zero-init
         }
         foreach (var prop in decl.Members.OfType<PropertyDeclarationSyntax>())
         {
@@ -228,17 +228,17 @@ internal sealed partial class ModuleEmitter
                 continue;
             if (prop.Initializer is not null)
                 inits.Add(new Assignment(
-                    new MemberAccess(new Identifier("self"), prop.Identifier.Text),
+                    new MemberAccess(new Identifier("self"), LuauId(prop.Identifier.Text)),
                     CopyIfNeeded(prop.Initializer.Value, LowerExpr(prop.Initializer.Value))));
             else if (ZeroDefault(model.GetTypeInfo(prop.Type).Type) is { } zero)
-                inits.Add(new Assignment(new MemberAccess(new Identifier("self"), prop.Identifier.Text), zero));
+                inits.Add(new Assignment(new MemberAccess(new Identifier("self"), LuauId(prop.Identifier.Text)), zero));
         }
         // events -> a signal object per event field
         foreach (var ev in decl.Members.OfType<EventFieldDeclarationSyntax>())
             if (!ev.Modifiers.Any(SyntaxKind.StaticKeyword))
                 foreach (var v in ev.Declaration.Variables)
                     inits.Add(new Assignment(
-                        new MemberAccess(new Identifier("self"), v.Identifier.Text),
+                        new MemberAccess(new Identifier("self"), LuauId(v.Identifier.Text)),
                         new Call(new MemberAccess(new Identifier("RBXCS"), "signal"), Array.Empty<Expression>())));
         return inits;
     }

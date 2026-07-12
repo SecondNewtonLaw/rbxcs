@@ -10,7 +10,7 @@ internal sealed partial class ModuleEmitter
     private string RequireLocalName(INamedTypeSymbol type)
     {
         if (_thisModuleTypes.Contains(type.Name) || IsRobloxNative(type))
-            return type.Name; // native Roblox globals (Vector3, game, ...) need no require
+            return LuauId(type.Name); // user same-module name may be a keyword; Roblox names never are
         if (map.TryGetType(type, out var _))
         {
             _externalRequires[type.Name] = map.TypeRequire(type);
@@ -149,6 +149,11 @@ internal sealed partial class ModuleEmitter
     };
 
     private static string LuauId(string name) => LuauReserved.Contains(name) ? name + "_" : name;
+
+    // Escapes a member/type name only when it's user-declared (has source): Roblox/BCL/import names
+    // come from metadata and are never renamed (and are never reserved words anyway).
+    private static string UserId(ISymbol? sym, string name) =>
+        sym?.DeclaringSyntaxReferences.Length > 0 ? LuauId(name) : name;
 
     // Strips C# numeric suffixes (f/d/m/u/l) and digit-separator underscores; Luau has one number
     // type and no suffixes. Hex/binary keep their digits (only integer suffixes trimmed).

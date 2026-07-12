@@ -32,9 +32,12 @@ internal sealed partial class ModuleEmitter
 
     private Statement LowerLocal(LocalDeclarationStatementSyntax local)
     {
-        var v = local.Declaration.Variables[0]; // multi-declarator -> F-later
-        var value = v.Initializer is null ? null : CopyIfNeeded(v.Initializer.Value, LowerExpr(v.Initializer.Value));
-        return new LocalDeclaration(LuauId(v.Identifier.Text), value);
+        var decls = local.Declaration.Variables
+            .Select(v => (Statement)new LocalDeclaration(
+                LuauId(v.Identifier.Text),
+                v.Initializer is null ? null : CopyIfNeeded(v.Initializer.Value, LowerExpr(v.Initializer.Value))))
+            .ToList();
+        return decls.Count == 1 ? decls[0] : new MultiStatement(decls);
     }
 
     // Normal `return` outside a guarded region; inside try/catch it becomes a control marker.
@@ -134,20 +137,28 @@ internal sealed partial class ModuleEmitter
     private static bool EndsInTerminator(BlockSyntax block) =>
         block.Statements.Count > 0 && block.Statements[block.Statements.Count - 1] is ReturnStatementSyntax or ThrowStatementSyntax;
 
-    private Statement LowerExpressionStatement(ExpressionStatementSyntax expr)
+    private Statement LowerExpressionStatement(ExpressionStatementSyntax expr) =>
+        LowerExpressionAsStatement(expr.Expression);
+
+    // Lowers an expression used in statement position (statement body or an expression-bodied setter),
+    // so assignments/compounds/increments become real Luau statements rather than value expressions.
+    private Statement LowerExpressionAsStatement(ExpressionSyntax e)
     {
         // event += handler / event -= handler  ->  signal:Connect / signal:Disconnect
-        if (expr.Expression is AssignmentExpressionSyntax evAsn
+        if (e is AssignmentExpressionSyntax evAsn
             && model.GetSymbolInfo(evAsn.Left).Symbol is IEventSymbol)
         {
             var method = evAsn.IsKind(SyntaxKind.AddAssignmentExpression) ? "Connect" : "Disconnect";
             return new ExpressionStatement(new MethodCall(LowerExpr(evAsn.Left), method, new[] { LowerExpr(evAsn.Right) }));
         }
 
-        switch (expr.Expression)
+        switch (e)
         {
             case AssignmentExpressionSyntax { RawKind: (int)SyntaxKind.SimpleAssignmentExpression } asn:
                 return LowerSimpleAssignment(asn);
+            case AssignmentExpressionSyntax asn // Prop op= x -> set_Prop(get_Prop() op x)
+                when model.GetSymbolInfo(asn.Left).Symbol is IPropertySymbol { IsIndexer: false } bp && IsBodiedProperty(bp):
+                return CompoundBodiedProperty(asn, bp);
             case AssignmentExpressionSyntax asn when IsBitwiseCompound(asn): // a &= b -> a = bit32.band(a, b)
             {
                 var l = LowerExpr(asn.Left);
@@ -171,7 +182,7 @@ internal sealed partial class ModuleEmitter
             case PrefixUnaryExpressionSyntax p when p.OperatorToken.Text is "++" or "--":
                 return IncrementOf(p.Operand, p.OperatorToken.Text);
             default:
-                return new ExpressionStatement(LowerExpr(expr.Expression));
+                return new ExpressionStatement(LowerExpr(e));
         }
     }
 
@@ -209,6 +220,32 @@ internal sealed partial class ModuleEmitter
 
     private static bool IsBitwiseCompound(AssignmentExpressionSyntax asn) =>
         asn.OperatorToken.Text is "&=" or "|=" or "^=" or "<<=" or ">>=";
+
+    // Prop op= x on a get/set property: read via get, combine, write via set (ponytail: receiver
+    // evaluated twice). Honors string concat, bit32, and integer-division mappings.
+    private Statement CompoundBodiedProperty(AssignmentExpressionSyntax asn, IPropertySymbol p)
+    {
+        var combined = CompoundCombine(asn, LowerExpr(asn.Left), LowerExpr(asn.Right));
+        var setName = "set_" + p.Name;
+        if (p.IsStatic)
+            return new ExpressionStatement(new Call(
+                new MemberAccess(new RawExpression(RequireLocalName((INamedTypeSymbol)p.ContainingType!)), setName), new[] { combined }));
+        var recv = asn.Left is MemberAccessExpressionSyntax ma ? LowerExpr(ma.Expression) : new Identifier("self");
+        return new ExpressionStatement(new MethodCall(recv, setName, new[] { combined }));
+    }
+
+    private Expression CompoundCombine(AssignmentExpressionSyntax asn, Expression left, Expression right)
+    {
+        var op = asn.OperatorToken.Text.TrimEnd('=');
+        var lt = model.GetTypeInfo(asn.Left).Type;
+        if (MapBitwise(op, left, right, lt?.SpecialType == SpecialType.System_Boolean) is { } bw)
+            return bw;
+        if (MapIntDivMod(op, left, right, lt, model.GetTypeInfo(asn.Right).Type) is { } dm)
+            return dm;
+        if (op == "+" && lt?.SpecialType == SpecialType.System_String)
+            op = "..";
+        return new Binary(left, op, right);
+    }
 
     private string CompoundOp(AssignmentExpressionSyntax asn)
     {

@@ -84,6 +84,10 @@ public sealed class LuauWriter
                 Indented(db.Body);
                 Line("end");
                 break;
+            case MultiStatement ms:
+                foreach (var s in ms.Statements)
+                    WriteStatement(s);
+                break;
             default:
                 throw new NotSupportedException($"statement {stmt.GetType().Name}");
         }

@@ -10,6 +10,13 @@ public sealed class LocalDeclaration(string name, Expression? value) : Statement
     public Expression? Value { get; } = value;
 }
 
+// Several statements emitted inline at the same scope (no do/end wrapper) — e.g. one C# multi-declarator
+// `int a = 1, b, c = 3;` -> three `local` lines.
+public sealed class MultiStatement(System.Collections.Generic.IReadOnlyList<Statement> statements) : Statement
+{
+    public System.Collections.Generic.IReadOnlyList<Statement> Statements { get; } = statements;
+}
+
 // `<target> = <value>` (target is an lvalue: Identifier or MemberAccess).
 public sealed class Assignment(Expression target, Expression value) : Statement
 {

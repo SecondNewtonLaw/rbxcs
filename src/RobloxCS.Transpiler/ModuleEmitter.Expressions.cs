@@ -78,7 +78,7 @@ internal sealed partial class ModuleEmitter
             case ConditionalAccessExpressionSyntax ca:
                 return LowerConditionalAccess(ca);
             case CastExpressionSyntax cast:
-                return LowerExpr(cast.Expression); // ponytail: cast erased (no runtime conv yet)
+                return LowerCast(cast);
             default:
                 return new RawExpression($"nil --[[rbxcs unsupported: {expr.Kind()}]]");
         }
@@ -108,17 +108,17 @@ internal sealed partial class ModuleEmitter
             case IParameterSymbol or ILocalSymbol:
                 return new Identifier(LuauId(id.Identifier.Text));
             case IEventSymbol { IsStatic: false }:
-                return new MemberAccess(new Identifier("self"), id.Identifier.Text);
+                return new MemberAccess(new Identifier("self"), UserId(sym, id.Identifier.Text));
             case IPropertySymbol { IsStatic: false } bp when IsBodiedProperty(bp):
                 return new MethodCall(new Identifier("self"), "get_" + id.Identifier.Text, Array.Empty<Expression>());
             case IPropertySymbol { IsStatic: true } bps when IsBodiedProperty(bps):
                 return new Call(new MemberAccess(new RawExpression(RequireLocalName((INamedTypeSymbol)sym.ContainingType!)), "get_" + id.Identifier.Text), Array.Empty<Expression>());
             case IFieldSymbol { IsStatic: false } or IPropertySymbol { IsStatic: false }:
-                return new MemberAccess(new Identifier("self"), id.Identifier.Text);
+                return new MemberAccess(new Identifier("self"), UserId(sym, id.Identifier.Text));
             case IFieldSymbol { IsStatic: true } or IPropertySymbol { IsStatic: true }:
             {
                 var owner = (INamedTypeSymbol)sym.ContainingType!;
-                return new MemberAccess(new RawExpression(RequireLocalName(owner)), id.Identifier.Text);
+                return new MemberAccess(new RawExpression(RequireLocalName(owner)), UserId(sym, id.Identifier.Text));
             }
             case INamedTypeSymbol t:
                 return new RawExpression(RequireLocalName(t));
@@ -165,9 +165,9 @@ internal sealed partial class ModuleEmitter
         MaybeWarnExternal(sym, ma);
 
         if (sym is { IsStatic: true } && sym.ContainingType is INamedTypeSymbol owner)
-            return new MemberAccess(new RawExpression(RequireLocalName(owner)), memberName);
+            return new MemberAccess(new RawExpression(RequireLocalName(owner)), UserId(sym, memberName));
 
-        return new MemberAccess(LowerExpr(ma.Expression), memberName);
+        return new MemberAccess(LowerExpr(ma.Expression), UserId(sym, memberName));
     }
 
     private Expression LowerInvocation(InvocationExpressionSyntax inv)
@@ -219,8 +219,8 @@ internal sealed partial class ModuleEmitter
                 if (isGlobal)
                     return new Call(new Identifier(methodName), args);
                 if (sym is { IsStatic: true } && sym.ContainingType is INamedTypeSymbol owner)
-                    return new Call(new MemberAccess(new RawExpression(RequireLocalName(owner)), methodName), args);
-                return new MethodCall(LowerExpr(ma.Expression), methodName, args);
+                    return new Call(new MemberAccess(new RawExpression(RequireLocalName(owner)), UserId(sym, methodName)), args);
+                return new MethodCall(LowerExpr(ma.Expression), UserId(sym, methodName), args);
             }
             case IdentifierNameSyntax id:
                 return LowerUnqualifiedCall(id.Identifier.Text, sym, isGlobal, args);
@@ -387,6 +387,17 @@ internal sealed partial class ModuleEmitter
         var left = LowerExpr(bin.Left);
         var right = LowerExpr(bin.Right);
         var op = bin.OperatorToken.Text;
+        var lt = model.GetTypeInfo(bin.Left).Type;
+        var rt = model.GetTypeInfo(bin.Right).Type;
+
+        var concat = op == "+" && IsStringConcat(bin);
+        // C# char promotes to its int code point in arithmetic/bitwise (but stays text in `+` concat).
+        // ponytail: string.byte is the first UTF-8 byte, so only ASCII chars are exact.
+        if (!concat && op is "+" or "-" or "*" or "/" or "%" or "&" or "|" or "^" or "<<" or ">>")
+        {
+            if (lt?.SpecialType == SpecialType.System_Char) left = ByteOf(left);
+            if (rt?.SpecialType == SpecialType.System_Char) right = ByteOf(right);
+        }
 
         // Luau has no bitwise operators: &/|/^/<</>> map to bit32.* (on bool, &/|/^ are logical).
         if (MapBitwise(op, left, right, IsBoolOperand(bin)) is { } bw)
@@ -395,11 +406,10 @@ internal sealed partial class ModuleEmitter
         // Integer / and %: unsigned operands use native // and % (exact, both >= 0). Signed operands
         // need helpers — Luau // floors toward -inf but C# truncates toward zero, and Luau % takes the
         // divisor's sign while C# takes the dividend's.
-        if (MapIntDivMod(op, left, right, model.GetTypeInfo(bin.Left).Type, model.GetTypeInfo(bin.Right).Type) is { } dm)
+        if (MapIntDivMod(op, left, right, lt, rt) is { } dm)
             return dm;
 
-        // string `+` -> Luau `..`
-        if (op == "+" && IsStringConcat(bin))
+        if (concat)
             op = "..";
         op = op switch
         {
@@ -409,6 +419,24 @@ internal sealed partial class ModuleEmitter
             _ => op,
         };
         return new Binary(left, op, right);
+    }
+
+    private static Expression ByteOf(Expression charExpr) =>
+        new Call(new RawExpression("string.byte"), new[] { charExpr });
+
+    // Casts are otherwise erased, except char <-> integer, which changes representation (char is a
+    // 1-char string; its integer form is the code point). ponytail: numeric conv (double->int etc.)
+    // still relies on Luau's own coercion.
+    private Expression LowerCast(CastExpressionSyntax cast)
+    {
+        var inner = LowerExpr(cast.Expression);
+        var to = model.GetTypeInfo(cast.Type).Type?.SpecialType;
+        var from = model.GetTypeInfo(cast.Expression).Type?.SpecialType;
+        if (from == SpecialType.System_Char && to is not SpecialType.System_Char and not null && to != SpecialType.System_String)
+            return ByteOf(inner); // (int)ch -> code point
+        if (to == SpecialType.System_Char && from != SpecialType.System_Char)
+            return new Call(new RawExpression("string.char"), new[] { inner }); // (char)n -> 1-char string
+        return inner;
     }
 
     // &/|/^/<</>> -> Luau. Integer operands use bit32 (32-bit unsigned semantics — differs from C#
@@ -433,7 +461,7 @@ internal sealed partial class ModuleEmitter
     private static bool IsIntegral(ITypeSymbol? t) => t?.SpecialType is
         SpecialType.System_Byte or SpecialType.System_SByte or SpecialType.System_Int16
         or SpecialType.System_UInt16 or SpecialType.System_Int32 or SpecialType.System_UInt32
-        or SpecialType.System_Int64 or SpecialType.System_UInt64;
+        or SpecialType.System_Int64 or SpecialType.System_UInt64 or SpecialType.System_Char; // char promotes to int
 
     private static bool IsUnsigned(ITypeSymbol? t) => t?.SpecialType is
         SpecialType.System_Byte or SpecialType.System_UInt16 or SpecialType.System_UInt32
