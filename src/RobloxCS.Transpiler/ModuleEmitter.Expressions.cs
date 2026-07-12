@@ -546,11 +546,24 @@ internal sealed partial class ModuleEmitter
                     parts.Add(new InterpolationPart(text.TextToken.ValueText, null));
                     break;
                 case InterpolationSyntax hole:
-                    parts.Add(new InterpolationPart(null, LowerExpr(hole.Expression)));
+                    parts.Add(new InterpolationPart(null, LowerHole(hole)));
                     break;
             }
         }
         return new InterpolatedString(parts);
+    }
+
+    // `{expr,align:format}` — apply the C# format via RBXCS.tostringf, then pad to the alignment
+    // width (negative = left-justify). Both clauses are optional; bare `{expr}` is just the expr.
+    private Expression LowerHole(InterpolationSyntax hole)
+    {
+        var e = LowerExpr(hole.Expression);
+        if (hole.FormatClause is { } fmt)
+            e = new Call(new RawExpression("RBXCS.tostringf"),
+                new[] { e, new Literal(LuauString(fmt.FormatStringToken.ValueText)) });
+        if (hole.AlignmentClause is { } al && model.GetConstantValue(al.Value).Value is { } w)
+            e = new Call(new RawExpression("RBXCS.align"), new[] { e, new Literal(Convert.ToInt64(w).ToString()) });
+        return e;
     }
 
     private bool IsStringConcat(BinaryExpressionSyntax bin) =>

@@ -164,8 +164,8 @@ public sealed class LuauWriter
             if (p.Expression is not null)
                 sb.Append('{').Append(Expr(p.Expression)).Append('}');
             else
-                // escape Luau interpolation metacharacters in literal text
-                sb.Append((p.Text ?? "").Replace("`", "\\`").Replace("{", "\\{").Replace("}", "\\}"));
+                // escape Luau interpolation metacharacters in literal text (backslash first)
+                sb.Append((p.Text ?? "").Replace("\\", "\\\\").Replace("`", "\\`").Replace("{", "\\{").Replace("}", "\\}"));
         }
         return sb.Append('`').ToString();
     }

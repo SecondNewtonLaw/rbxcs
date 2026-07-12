@@ -579,6 +579,17 @@ function RBXCS.tostringf(v: any, fmt: string): string
 	return tostring(v)
 end
 
+-- C# interpolation alignment `{x,width}`: pad tostring(v) to |width| (negative width = left-justify).
+function RBXCS.align(v: any, width: number): string
+	local s = tostring(v)
+	local pad = math.abs(width) - #s
+	if pad <= 0 then
+		return s
+	end
+	local spaces = string.rep(" ", pad)
+	return if width < 0 then s .. spaces else spaces .. s
+end
+
 -- C# object.GetHashCode() for primitives. ponytail: value-based, stable within a run; not a
 -- cryptographic or cross-run-stable hash (C# doesn't guarantee cross-run stability either).
 function RBXCS.hashCode(v: any): number

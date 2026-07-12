@@ -75,4 +75,12 @@ public class Gaps
     }
 
     public bool Eq() => 5.Equals(5) && !"a".Equals("b") && 5.GetHashCode() == 5;
+
+    // interpolation format + alignment clauses (were dropped): $"{pi:F2}", $"{n,4}", $"{s,-3}".
+    public string Interp()
+    {
+        double pi = 3.14159;
+        int n = 7;
+        return $"pi={pi:F2}|{n,4}|{"x",-3}!"; // "pi=3.14|   7|x  !"
+    }
 }
