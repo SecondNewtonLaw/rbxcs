@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Packaging-only project: the single NuGet consumers reference. Bundles the build task (+deps),
+       the Luau runtime, the analyzer, the reference defs, and the props/targets. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <PackageId>RobloxCS.Sdk</PackageId>
+    <Version>0.1.0-alpha</Version>
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <NoWarn>$(NoWarn);NU5100;NU5128</NoWarn>
+  </PropertyGroup>
+
+  <!-- Build these first so their outputs exist for packing. -->
+  <ItemGroup>
+    <ProjectReference Include="..\RobloxCS.BuildTask\RobloxCS.BuildTask.csproj" PrivateAssets="all" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\RobloxCS.Analyzer\RobloxCS.Analyzer.csproj" PrivateAssets="all" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\RobloxCS.Defs\RobloxCS.Defs.csproj" PrivateAssets="all" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- Package layout:
+         build/RobloxCS.Sdk.props|targets   MSBuild integration
+         tasks/*.dll                         transpiler task + its deps (Transpiler/Luau/CodeAnalysis)
+         runtime/*.luau                      RBXCS runtime, copied into the emitted tree
+         analyzers/dotnet/cs/*.dll           editor diagnostics
+         lib/netstandard2.0/RobloxCS.Defs    typed surface the consumer compiles against -->
+  <ItemGroup>
+    <None Include="build\**" Pack="true" PackagePath="build\" />
+    <None Include="..\RobloxCS.Runtime\runtime\*.luau" Pack="true" PackagePath="runtime\" />
+    <None Include="..\RobloxCS.BuildTask\bin\$(Configuration)\netstandard2.0\*.dll" Pack="true" PackagePath="tasks\" />
+    <None Include="..\RobloxCS.Analyzer\bin\$(Configuration)\netstandard2.0\RobloxCS.Analyzer.dll" Pack="true" PackagePath="analyzers\dotnet\cs\" />
+    <None Include="..\RobloxCS.Defs\bin\$(Configuration)\netstandard2.0\RobloxCS.Defs.dll" Pack="true" PackagePath="lib\netstandard2.0\" />
+  </ItemGroup>
+
+</Project>

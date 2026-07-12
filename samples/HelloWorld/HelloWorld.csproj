@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Never runs as .NET; C# here is source to transpile. Library = no entrypoint needed. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!-- The typed surface the C# compiles against (attributes + Roblox globals + BCL subset).
+       F10 replaces this ProjectReference with the SDK's prebuilt ref assemblies. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\RobloxCS.Defs\RobloxCS.Defs.csproj" />
+    <!-- Force the transpiler task to build first (loaded via AssemblyFile, not referenced). -->
+    <ProjectReference Include="..\..\src\RobloxCS.BuildTask\RobloxCS.BuildTask.csproj"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- P0 LOCAL WIRING: consume the SDK from source. Packaged consumers need only
+       a single <PackageReference Include="RobloxCS.Sdk" />. -->
+  <PropertyGroup>
+    <RobloxCSTaskAssembly>$(MSBuildThisFileDirectory)..\..\src\RobloxCS.BuildTask\bin\$(Configuration)\netstandard2.0\RobloxCS.BuildTask.dll</RobloxCSTaskAssembly>
+    <RobloxCSRuntimeDir>$(MSBuildThisFileDirectory)..\..\src\RobloxCS.Runtime\runtime</RobloxCSRuntimeDir>
+  </PropertyGroup>
+
+  <Import Project="..\..\src\RobloxCS.Sdk\build\RobloxCS.Sdk.props" />
+  <Import Project="..\..\src\RobloxCS.Sdk\build\RobloxCS.Sdk.targets" />
+
+</Project>

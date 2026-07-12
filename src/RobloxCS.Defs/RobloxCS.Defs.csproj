@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- C# reference definitions the CONSUMER compiles against: context/entry attributes,
+       Roblox globals, BCL subset. F10 splits this into generated ref assemblies.
+       netstandard2.0 so any consumer TFM can reference it. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>RobloxCS.Defs</RootNamespace>
+  </PropertyGroup>
+
+</Project>

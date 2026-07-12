@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- `dotnet tool install RobloxCS.Cli` -> `rbxcs` command (scaffolding / project helpers). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>rbxcs</ToolCommandName>
+    <PackageId>RobloxCS.Cli</PackageId>
+    <Version>0.1.0-alpha</Version>
+    <RootNamespace>RobloxCS.Cli</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RobloxCS.Bindgen\RobloxCS.Bindgen.csproj" />
+  </ItemGroup>
+
+</Project>

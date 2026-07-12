@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "rbxcs",
+  "classifications": [ "Roblox", "Luau", "Game" ],
+  "identity": "RobloxCS.Game",
+  "name": "rbxcs Roblox game (C#)",
+  "shortName": "rbxcs-game",
+  "tags": { "language": "C#", "type": "project" },
+  "sourceName": "GameTemplate",
+  "preferNameDirectory": true
+}

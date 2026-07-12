@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/RobloxCS.Luau.Ast/RobloxCS.Luau.Ast.csproj" />
+    <Project Path="src/RobloxCS.Luau/RobloxCS.Luau.csproj" />
+    <Project Path="src/RobloxCS.Transpiler/RobloxCS.Transpiler.csproj" />
+    <Project Path="src/RobloxCS.Defs/RobloxCS.Defs.csproj" />
+    <Project Path="src/RobloxCS.BuildTask/RobloxCS.BuildTask.csproj" />
+    <Project Path="src/RobloxCS.Analyzer/RobloxCS.Analyzer.csproj" />
+    <Project Path="src/RobloxCS.ApiGen/RobloxCS.ApiGen.csproj" />
+    <Project Path="src/RobloxCS.Bindgen/RobloxCS.Bindgen.csproj" />
+    <Project Path="src/RobloxCS.Cli/RobloxCS.Cli.csproj" />
+    <Project Path="src/RobloxCS.Sdk/RobloxCS.Sdk.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/HelloWorld/HelloWorld.csproj" />
+  </Folder>
+</Solution>

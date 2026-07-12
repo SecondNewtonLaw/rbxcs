@@ -1,0 +1,37 @@
+<Project>
+
+  <!-- Task assembly location:
+       - Packaged NuGet: ../tasks/RobloxCS.BuildTask.dll relative to this .targets.
+       - Local dev: consumer sets $(RobloxCSTaskAssembly) to the build output. -->
+  <PropertyGroup>
+    <RobloxCSTaskAssembly Condition="'$(RobloxCSTaskAssembly)' == ''">$(MSBuildThisFileDirectory)..\tasks\RobloxCS.BuildTask.dll</RobloxCSTaskAssembly>
+    <RobloxCSRuntimeDir Condition="'$(RobloxCSRuntimeDir)' == ''">$(MSBuildThisFileDirectory)..\runtime</RobloxCSRuntimeDir>
+  </PropertyGroup>
+
+  <!-- TaskHostFactory runs the task in a short-lived out-of-proc host that exits after the build,
+       so the task dll + its deps aren't held locked by a reused MSBuild node (fixes MSB3021/3027). -->
+  <UsingTask TaskName="RobloxCS.BuildTask.TranspileToLuauTask"
+             AssemblyFile="$(RobloxCSTaskAssembly)"
+             TaskFactory="TaskHostFactory" />
+
+  <Target Name="RobloxCSTranspile" AfterTargets="Compile" DependsOnTargets="ResolveReferences">
+    <!-- Drop SDK-generated sources (AssemblyInfo, GlobalUsings, source-generator output in obj/). -->
+    <ItemGroup>
+      <_RobloxCSSource Include="@(Compile)"
+                       Exclude="$(IntermediateOutputPath)**\*.cs;$(BaseIntermediateOutputPath)**\*.cs" />
+      <!-- Hand-written .luau files in the project (excluding emitted output / obj / bin). -->
+      <_RobloxCSLuau Include="$(MSBuildProjectDirectory)\**\*.luau"
+                     Exclude="$(RobloxCSLuauOutputDir)\**\*.luau;$(BaseIntermediateOutputPath)**\*.luau;$(IntermediateOutputPath)**\*.luau;bin\**\*.luau;obj\**\*.luau" />
+    </ItemGroup>
+    <TranspileToLuauTask SourceFiles="@(_RobloxCSSource)"
+                         ReferencePaths="@(ReferencePathWithRefAssemblies)"
+                         OutputDirectory="$(RobloxCSLuauOutputDir)"
+                         RuntimeDirectory="$(RobloxCSRuntimeDir)"
+                         LuauContentFiles="@(_RobloxCSLuau)"
+                         ProjectDirectory="$(MSBuildProjectDirectory)">
+      <Output TaskParameter="GeneratedFiles" ItemName="RobloxCSLuauFiles" />
+    </TranspileToLuauTask>
+    <Message Importance="high" Text="rbxcs: emitted @(RobloxCSLuauFiles->Count()) module(s) to $(RobloxCSLuauOutputDir)" />
+  </Target>
+
+</Project>

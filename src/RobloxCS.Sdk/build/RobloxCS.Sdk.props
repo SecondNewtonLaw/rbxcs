@@ -1,0 +1,8 @@
+<Project>
+
+  <!-- Where transpiled Luau lands. Consumer can override in their csproj. -->
+  <PropertyGroup>
+    <RobloxCSLuauOutputDir Condition="'$(RobloxCSLuauOutputDir)' == ''">$(MSBuildProjectDirectory)\out-luau</RobloxCSLuauOutputDir>
+  </PropertyGroup>
+
+</Project>

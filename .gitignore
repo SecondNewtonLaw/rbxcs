@@ -1,0 +1,26 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+
+# Transpiler-emitted Luau tree (regenerated on every build)
+out-luau/
+
+# Generated bindings (rbxcs bind / add-package output in consumer projects)
+Bindings/
+
+# NuGet packages / build artifacts
+*.nupkg
+nupkg/
+*.snupkg
+
+# IDE / editor
+.idea/
+.vs/
+.vscode/
+*.user
+*.suo
+*.userprefs
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <ProjectReference Include="..\RobloxCS.Luau.Ast\RobloxCS.Luau.Ast.csproj" />
+    <ProjectReference Include="..\RobloxCS.Luau\RobloxCS.Luau.csproj" />
+  </ItemGroup>
+
+</Project>
