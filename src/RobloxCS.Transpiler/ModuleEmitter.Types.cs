@@ -76,6 +76,10 @@ internal sealed partial class ModuleEmitter
             // [Parallel] -> body runs desynchronized (parallel phase) via RBXCS.parallel, serial fallback.
             if (msym?.GetAttributes().Any(a => a.AttributeClass?.Name == "ParallelAttribute") ?? false)
             {
+                if (method.Body is not null)
+                    CheckParallelSafety(method.Body);
+                else if (method.ExpressionBody is not null)
+                    CheckParallelSafety(method.ExpressionBody.Expression);
                 var wrapped = new Chunk();
                 wrapped.Statements.Add(new Return(new Call(
                     new MemberAccess(new Identifier("RBXCS"), "parallel"),

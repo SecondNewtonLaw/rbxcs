@@ -30,4 +30,15 @@ public static class Pool
 
         print(totals.Get("sum"), totals.Get("count")); // 338350  4
     }
+
+    // Parallel-safety check: reads are fine in parallel; the Unsafe call + read-only write are flagged
+    // at compile time (RobloxThreadSafety, from the API dump's ThreadSafety tags).
+    [Parallel]
+    public static void Inspect(Part p)
+    {
+        if (p.Name == "")   // Instance.Name is ReadSafe -> read OK, no warning
+            return;
+        p.Anchored = true;  // BasePart.Anchored is ReadSafe -> write flagged
+        p.Destroy();        // Instance.Destroy is Unsafe -> flagged
+    }
 }

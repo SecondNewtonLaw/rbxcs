@@ -285,6 +285,8 @@ internal sealed partial class ModuleEmitter
             return WarnSequential(inv, sequential, "body references another module");
         }
 
+        CheckParallelSafety(lambda.Body); // this body runs in the parallel phase now
+
         // Synthetic worker: an [Actor] Script binding a parallel "run" handler over a slice.
         var workerName = $"{module.ModuleName}__pfor{++_pforCounter}";
         var capNames = caps.Select(c => LuauId(c.Name)).ToList();
@@ -311,6 +313,34 @@ internal sealed partial class ModuleEmitter
         var capTable = new TableConstructor(capNames.Select(n => new TableEntry(null, (Expression)new Identifier(n))).ToList());
         return new Call(new RawExpression("RBXCS.parallelFor"),
             new Expression[] { new RawExpression(templatePath), args[0], args[1], capTable });
+    }
+
+    // Checks a body that will run in the parallel phase (a [Parallel] method or a Parallel.For body):
+    // any Roblox member tagged Unsafe is illegal there, and a write to a ReadSafe member is illegal
+    // (readable but not writable). Emits a diagnostic per violation. Data: RobloxThreadSafety.g.cs.
+    private void CheckParallelSafety(SyntaxNode body)
+    {
+        foreach (var ma in body.DescendantNodesAndSelf().OfType<MemberAccessExpressionSyntax>())
+        {
+            var sym = model.GetSymbolInfo(ma).Symbol;
+            if (sym is not (IPropertySymbol or IMethodSymbol or IEventSymbol))
+                continue;
+            var ct = sym.ContainingType;
+            if (ct?.ContainingNamespace?.ToDisplayString() != "Roblox")
+                continue;
+            var key = ct.Name + "." + sym.Name;
+            if (RobloxThreadSafety.Unsafe.Contains(key))
+                ParallelWarn(ma, $"'{key}' is Unsafe in the parallel phase and will error at runtime; move it out of the parallel body");
+            else if (ma.Parent is AssignmentExpressionSyntax asn && asn.Left == ma && RobloxThreadSafety.ReadOnly.Contains(key))
+                ParallelWarn(ma, $"'{key}' is read-only in the parallel phase; do the assignment outside the parallel body");
+        }
+    }
+
+    private void ParallelWarn(SyntaxNode at, string msg)
+    {
+        var loc = at.GetLocation().GetLineSpan();
+        diagnostics.Add(new TranspileDiagnostic(
+            $"Parallel-safety: {msg}.", loc.Path, loc.StartLinePosition.Line + 1, loc.StartLinePosition.Character + 1));
     }
 
     private ITypeSymbol? CapType(ISymbol s) => s switch
