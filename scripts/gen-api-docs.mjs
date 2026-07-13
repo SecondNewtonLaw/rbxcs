@@ -3,7 +3,7 @@
 // Roblox API mirrors Roblox's own docs and is intentionally excluded). Output: website/docs/api/.
 // Cross-platform (Node). Usage: node scripts/gen-api-docs.mjs [Debug|Release]
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, mkdirSync, readdirSync, copyFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -27,11 +27,34 @@ run('defaultdocumentation', ['--AssemblyFilePath', dll, '--DocumentationFilePath
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
-// Keep the rbxcs-authored surface only (drops the ~5700 generated Roblox API stub pages).
-const keep = n => n.endsWith('.md') &&
-  (n.startsWith('RobloxCS.') || n.startsWith('Roblox.Globals') || n.startsWith('Roblox.SharedTableOps'));
+// Keep the rbxcs-authored surface only (drops the ~5700 generated Roblox API stub pages), and only
+// the TYPE-level page per type (not DefaultDocumentation's per-member pages) — members are already
+// tabulated inline on the type page, so a flat page-per-member sidebar is just noise.
+const surface = n => n.startsWith('RobloxCS.') || n.startsWith('Roblox.Globals') || n.startsWith('Roblox.SharedTableOps');
+const typeLevel = n => {
+  const base = n.replace(/\.md$/, '');
+  if (base.includes('(')) return false;             // methods / constructors
+  return base.split('.').length <= 2;               // namespace (RobloxCS) or namespace.Type
+};
+const keep = n => n.endsWith('.md') && surface(n) && typeLevel(n);
+const keptNames = new Set(readdirSync(tmp).filter(keep));
+
+// A link to a page we didn't keep would 404; render those as plain text (the label) instead.
+// DefaultDocumentation always emits `[label](target#anchor 'title')`, and target filenames contain
+// parens/commas, so split on the ` 'title'` suffix rather than trying to balance parens.
+const stripDeadLinks = md => md.replace(
+  /\[((?:[^\]\\]|\\.)*)\]\(([^']*?)\s'[^']*'\)/g,
+  (m, label, target) => {
+    const file = target.split('#')[0].trim();
+    if (!file.endsWith('.md')) return m;          // external URL — keep
+    return keptNames.has(file) ? m : label;       // dropped page — plain text
+  });
+
 let kept = 0;
-for (const f of readdirSync(tmp)) if (keep(f)) { copyFileSync(join(tmp, f), join(out, f)); kept++; }
+for (const f of keptNames) {
+  writeFileSync(join(out, f), stripDeadLinks(readFileSync(join(tmp, f), 'utf8')));
+  kept++;
+}
 rmSync(tmp, { recursive: true, force: true });
 
 writeFileSync(join(out, '_category_.json'), JSON.stringify({
