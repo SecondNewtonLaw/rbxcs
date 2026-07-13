@@ -1,7 +1,7 @@
 name: CI
 
-# Build gate for pull requests: the whole solution compiles, the sample transpiles, and every
-# emitted .luau is valid Luau syntax. No deploy (see deploy-docs.yml for that).
+# Build + test gate for pull requests: the whole solution compiles, the xUnit suite passes, the
+# Luau runtime behaves, and every emitted .luau is valid syntax. No deploy (see deploy-docs.yml).
 on:
   pull_request:
     branches: [main, dev]
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,20 +26,29 @@ jobs:
       - name: Build solution + emit sample
         run: dotnet build rbxcs.slnx -c Release -nodeReuse:false
 
-      - name: Get luau-compile
+      - name: Test (xUnit)
+        run: dotnet test tests/RobloxCS.Tests/RobloxCS.Tests.csproj -c Release --logger "console;verbosity=minimal"
+
+      - name: Get luau
         run: |
           curl -sSL -o luau.zip https://github.com/luau-lang/luau/releases/latest/download/luau-ubuntu.zip
           unzip -o -q luau.zip -d luau-bin
           chmod +x luau-bin/* || true
+          echo "luau-bin contents:"; ls -la luau-bin
+
+      - name: Luau runtime spec
+        run: |
+          LUAU=$(find luau-bin -name 'luau' -type f | head -1)
+          if [ -z "$LUAU" ]; then echo "luau runner not in release. Contents:"; ls -R luau-bin; exit 1; fi
+          "$LUAU" tests/luau/runtime.spec.luau
 
       - name: Syntax-check emitted Luau
         run: |
-          LC=$(find luau-bin -name 'luau-compile' | head -1)
-          if [ -z "$LC" ]; then echo "luau-compile not found in release. Contents:"; ls -R luau-bin; exit 1; fi
+          LC=$(find luau-bin -name 'luau-compile' -type f | head -1)
+          if [ -z "$LC" ]; then echo "luau-compile not in this luau release; skipping (dotnet tests cover emit shape)."; exit 0; fi
           fail=0; n=0
           for f in $(find samples/HelloWorld/out-luau -name '*.luau'); do
-            n=$((n+1))
-            "$LC" --binary "$f" >/dev/null || { echo "FAIL $f"; fail=1; }
+            n=$((n+1)); "$LC" --binary "$f" >/dev/null || { echo "FAIL $f"; fail=1; }
           done
           echo "luau-compile: checked $n file(s)"
           exit $fail

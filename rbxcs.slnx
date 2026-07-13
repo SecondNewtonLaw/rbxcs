@@ -14,4 +14,7 @@
   <Folder Name="/samples/">
     <Project Path="samples/HelloWorld/HelloWorld.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/RobloxCS.Tests/RobloxCS.Tests.csproj" />
+  </Folder>
 </Solution>
