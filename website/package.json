@@ -24,5 +24,6 @@
     "development": ["last 1 chrome version", "last 1 firefox version"]
   },
   "engines": { "node": ">=18.0" },
+  "packageManager": "pnpm@11.11.0",
   "pnpm": { "onlyBuiltDependencies": [] }
 }

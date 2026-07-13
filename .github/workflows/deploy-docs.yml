@@ -1,0 +1,74 @@
+name: Deploy docs
+
+# Docs are generated from source: .NET builds the sample (emits out-luau + the API surface),
+# DefaultDocumentation turns the XML docs into markdown, then Docusaurus builds the site.
+on:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; don't cancel a running deploy.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install DefaultDocumentation
+        run: |
+          dotnet tool install -g DefaultDocumentation.Console
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: website/pnpm-lock.yaml
+
+      # Builds ApiGen -> Defs (fetches the API dump) -> transpiler -> task -> sample, emitting
+      # samples/HelloWorld/out-luau, which the example pages are paired from.
+      - name: Build sample (emit Luau + API surface)
+        run: dotnet build samples/HelloWorld/HelloWorld.csproj -c Debug -nodeReuse:false
+
+      - name: Install docs deps
+        run: pnpm install --frozen-lockfile
+        working-directory: website
+
+      # prebuild regenerates docs/api (DefaultDocumentation) + docs/examples, then docusaurus build.
+      - name: Build docs
+        run: pnpm run build
+        working-directory: website
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
