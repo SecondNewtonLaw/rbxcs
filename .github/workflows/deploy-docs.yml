@@ -33,13 +33,17 @@ jobs:
           dotnet tool install -g DefaultDocumentation.Console
           echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
 
+      # Version is set here because our package.json lives in website/, not the repo root, so
+      # action-setup can't read packageManager from ./package.json.
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
+        with:
+          version: 11.11.0
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
           cache-dependency-path: website/pnpm-lock.yaml
 
